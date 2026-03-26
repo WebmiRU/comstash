@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lib/pq"
 	"gorm.io/datatypes"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -43,9 +44,9 @@ func storePackage(pkg *Package) {
 	}
 
 	rec := models.Package{
-		Name:        pkg.Name,
-		Description: pkg.Description,
-		//Keywords:          pq.StringArray(pkg.Keywords),
+		Name:              pkg.Name,
+		Description:       pkg.Description,
+		Keywords:          pq.StringArray(pkg.Keywords),
 		Homepage:          pkg.Homepage,
 		Version:           pkg.Version,
 		VersionNormalized: pkg.VersionNormalized,
@@ -65,15 +66,23 @@ func storePackage(pkg *Package) {
 
 	// Записываем в БД
 	result := db.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "name"}, {Name: "version"}},
-		DoUpdates: clause.AssignmentColumns([]string{"metadata", "updated_at"}),
-	}).Create(&pkg)
+		Columns: []clause.Column{{Name: "name"}, {Name: "version"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"updated_at",
+			"description",
+			"keywords",
+			"homepage",
+			"type",
+			"support_issues",
+			"support_source",
+		}),
+	}).Create(&rec)
 
 	if result.Error != nil {
 		log.Printf("Ошибка вставки: %v", result.Error)
 	}
 
-	fmt.Printf("Создана запись с ID: %d\n", rec.ID)
+	//fmt.Printf("Создана запись с ID: %d\n", rec.ID)
 }
 
 func main() {
@@ -93,11 +102,50 @@ func main() {
 		log.Fatalf("loading laravel_framework.json error: %v", err)
 	}
 
-	for name, pkg := range j.Packages {
-		fmt.Printf("package %s\n", name)
+	var description, homepage, _type, supportIssues, supportSource string
+	var keywords []string
 
+	for name, pkg := range j.Packages {
 		for _, p := range pkg {
-			storePackage(&p)
+			p.Name = name
+
+			if len(p.Description) > 0 {
+				description = p.Description
+			} else {
+				p.Description = description
+			}
+
+			if len(p.Homepage) > 0 {
+				homepage = p.Homepage
+			} else {
+				p.Homepage = homepage
+			}
+
+			if len(p.Keywords) > 0 {
+				keywords = p.Keywords
+			} else {
+				p.Keywords = keywords
+			}
+
+			if len(p.Type) > 0 {
+				_type = p.Type
+			} else {
+				p.Type = _type
+			}
+
+			if len(p.Support.Issues) > 0 {
+				supportIssues = p.Support.Issues
+			} else {
+				p.Support.Issues = supportIssues
+			}
+
+			if len(p.Support.Source) > 0 {
+				supportSource = p.Support.Source
+			} else {
+				p.Support.Source = supportSource
+			}
+
+			//storePackage(&p)
 		}
 	}
 
@@ -107,14 +155,14 @@ func main() {
 
 	fmt.Printf("Найдено в БД: ID=%d, Name=%s", pkg.ID, pkg.Name)
 
-	//port := ":8080"
-	//fmt.Printf("Сервер слушает на http://localhost%s\n", port)
+	port := ":8080"
+	fmt.Printf("Сервер слушает на http://localhost%s\n", port)
 
-	//http.HandleFunc("/", handler)
-	//
-	//if err := http.ListenAndServe(port, nil); err != nil {
-	//	panic(err)
-	//}
+	http.HandleFunc("/", handler)
+
+	if err := http.ListenAndServe(port, nil); err != nil {
+		panic(err)
+	}
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
