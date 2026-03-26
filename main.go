@@ -13,6 +13,7 @@ import (
 	"gorm.io/datatypes"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
 )
 
@@ -42,8 +43,9 @@ func storePackage(pkg *Package) {
 	}
 
 	rec := models.Package{
-		Name:              pkg.Name,
-		Description:       pkg.Description,
+		Name:        pkg.Name,
+		Description: pkg.Description,
+		//Keywords:          pq.StringArray(pkg.Keywords),
 		Homepage:          pkg.Homepage,
 		Version:           pkg.Version,
 		VersionNormalized: pkg.VersionNormalized,
@@ -62,11 +64,15 @@ func storePackage(pkg *Package) {
 	}
 
 	// Записываем в БД
-	result := db.Create(&rec)
+	result := db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "name"}, {Name: "version"}},
+		DoUpdates: clause.AssignmentColumns([]string{"metadata", "updated_at"}),
+	}).Create(&pkg)
 
 	if result.Error != nil {
 		log.Printf("Ошибка вставки: %v", result.Error)
 	}
+
 	fmt.Printf("Создана запись с ID: %d\n", rec.ID)
 }
 
@@ -92,7 +98,6 @@ func main() {
 
 		for _, p := range pkg {
 			storePackage(&p)
-			return
 		}
 	}
 
