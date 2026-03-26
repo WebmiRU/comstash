@@ -4,30 +4,28 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "92123d021d739f810c51bb9202b0984f",
+    "content-hash": "c4c159e305e48fa8b3930f3ee68916d4",
     "packages": [
         {
             "name": "laravel/framework",
-            "version": "v13.2.0",
+            "version": "v13.1.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/laravel/framework.git",
-                "reference": "9e48d1fe933e89de628dafa167d2c5778566d4cf"
+                "reference": "32c5fa8b3d0150f97f1b98f5690eba34b73b3d75"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/laravel/framework/zipball/9e48d1fe933e89de628dafa167d2c5778566d4cf",
-                "reference": "9e48d1fe933e89de628dafa167d2c5778566d4cf",
+                "url": "http://localhost:8080/cache/laravel/framework?v=v13.1.0",
+                "reference": "32c5fa8b3d0150f97f1b98f5690eba34b73b3d75",
                 "shasum": ""
             },
             "type": "library",
-            "description": "The Laravel Framework.",
-            "homepage": "https://laravel.com",
             "support": {
-                "issues": "https://github.com/laravel/framework/issues",
-                "source": "https://github.com/laravel/framework"
+                "issues": "",
+                "source": ""
             },
-            "time": "2026-03-24T18:42:09+00:00"
+            "time": "2026-03-18T14:33:42+00:00"
         }
     ],
     "packages-dev": [],

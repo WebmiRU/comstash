@@ -12,6 +12,6 @@
     "secure-http": false
   },
   "require": {
-    "laravel/framework": "13.2.0"
+    "laravel/framework": "13.1.0"
   }
 }
