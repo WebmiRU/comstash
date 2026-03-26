@@ -165,6 +165,14 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 			_ = json.Unmarshal(v.Extra, &extra)
 		}
 
+		authors := make([]Author, 0, len(v.Authors))
+		for _, a := range v.Authors {
+			authors = append(authors, Author{
+				Name:  a.Name,
+				Email: a.Email,
+			})
+		}
+
 		packages = append(packages, Package{
 			Name:              v.Name,
 			Description:       v.Description,
@@ -175,7 +183,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 			License:           v.License,
 			Type:              v.Type,
 			Time:              v.Time,
-			Authors:           v.Authors,
+			Authors:           authors,
 			Source: Source{
 				URL:       v.SourceUrl,
 				Type:      v.SourceType,
