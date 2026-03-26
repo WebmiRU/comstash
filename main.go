@@ -104,50 +104,11 @@ func main() {
 		log.Fatalf("loading laravel_framework.json error: %v", err)
 	}
 
-	var description, homepage, _type, supportIssues, supportSource string
-	var keywords []string
-
 	for name, pkg := range j.Packages {
 		for _, p := range pkg {
 			p.Name = name
 
-			if len(p.Description) > 0 {
-				description = p.Description
-			} else {
-				p.Description = description
-			}
-
-			if len(p.Homepage) > 0 {
-				homepage = p.Homepage
-			} else {
-				p.Homepage = homepage
-			}
-
-			if len(p.Keywords) > 0 {
-				keywords = p.Keywords
-			} else {
-				p.Keywords = keywords
-			}
-
-			if len(p.Type) > 0 {
-				_type = p.Type
-			} else {
-				p.Type = _type
-			}
-
-			if len(p.Support.Issues) > 0 {
-				supportIssues = p.Support.Issues
-			} else {
-				p.Support.Issues = supportIssues
-			}
-
-			if len(p.Support.Source) > 0 {
-				supportSource = p.Support.Source
-			} else {
-				p.Support.Source = supportSource
-			}
-
-			//storePackage(&p)
+			storePackage(&p)
 		}
 	}
 
@@ -190,14 +151,19 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	var packages []Package
 
 	for _, v := range data {
+		var extra map[string]any
+		if len(v.Extra) > 0 {
+			_ = json.Unmarshal(v.Extra, &extra)
+		}
+
 		packages = append(packages, Package{
 			Name:              v.Name,
 			Description:       v.Description,
-			Keywords:          nil,
+			Keywords:          v.Keywords,
 			Homepage:          v.Homepage,
 			Version:           v.Version,
 			VersionNormalized: v.VersionNormalized,
-			License:           nil,
+			License:           v.License,
 			Type:              v.Type,
 			Time:              v.Time,
 			Authors:           nil,
@@ -221,20 +187,21 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 				Files: nil,
 				Psr4:  nil,
 			},
-			Extra:      nil,
+			Extra:      extra,
 			Require:    nil,
 			RequireDev: nil,
 			Suggest:    nil,
 		})
 	}
 
+	packageName := fmt.Sprintf("%s/%s", vendor, pkg)
 	response := Repository{
 		Minified: "composer/2.0",
-		Packages: packages,
+		Packages: map[string][]Package{
+			packageName: packages,
+		},
 	}
 
-	// 3. Кодируем напрямую в ResponseWriter через JSON v2
-	// Это быстрее, чем Marshal, так как не создает временный слайс байтов
 	err := json.MarshalWrite(w, response)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
