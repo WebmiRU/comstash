@@ -11,6 +11,7 @@ type Package struct {
 	Homepage          string         `gorm:"type:text"`
 	Version           string         `gorm:"type:text"`
 	VersionNormalized string         `gorm:"type:text"`
+	License           pq.StringArray `gorm:"column:license;type:text[]"`
 	SourceUrl         string         `gorm:"type:text"`
 	SourceType        string         `gorm:"type:text"`
 	SourceReference   string         `gorm:"type:text"`

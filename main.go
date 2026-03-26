@@ -16,6 +16,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
+
+	"github.com/go-chi/chi/v5"
 )
 
 var db *gorm.DB
@@ -145,7 +147,7 @@ func main() {
 				p.Support.Source = supportSource
 			}
 
-			//storePackage(&p)
+			storePackage(&p)
 		}
 	}
 
@@ -155,13 +157,49 @@ func main() {
 
 	fmt.Printf("Найдено в БД: ID=%d, Name=%s", pkg.ID, pkg.Name)
 
-	port := ":8080"
-	fmt.Printf("Сервер слушает на http://localhost%s\n", port)
+	r := chi.NewRouter()
+	//r.Use(middleware.Compress(9, "application/json", "text/xml"))
+	r.Get("/p2/{vendor}/{pkg}.json", vendorPackageHandler)
 
-	http.HandleFunc("/", handler)
-
-	if err := http.ListenAndServe(port, nil); err != nil {
+	if err := http.ListenAndServe(":8080", nil); err != nil {
 		panic(err)
+	}
+}
+
+func packages(w http.ResponseWriter, r *http.Request) {
+
+}
+
+func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
+	vendor := chi.URLParam(r, "vendor")
+	pkg := chi.URLParam(r, "pkg")
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var data []models.Package
+	result := db.Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).Find(&data)
+
+	for _, v := range data {
+		fmt.Println(v.Name)
+	}
+
+	if result.Error != nil {
+		log.Println(result.Error)
+	}
+
+	fmt.Printf("Найдено версий: %d\n", len(data))
+
+	response := map[string]any{
+		"packages": map[string]any{
+			"vendor/package": data,
+		},
+	}
+
+	// 3. Кодируем напрямую в ResponseWriter через JSON v2
+	// Это быстрее, чем Marshal, так как не создает временный слайс байтов
+	err := json.MarshalWrite(w, response)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
