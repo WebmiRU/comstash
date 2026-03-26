@@ -3,16 +3,16 @@ version: '3.8'
 services:
   postgres:
     image: postgres:18-alpine
-    container_name: compo_postres
+    container_name: comstash_postres
     restart: always
     environment:
-      POSTGRES_USER: compo
-      POSTGRES_PASSWORD: compo
-      POSTGRES_DB: compo
+      POSTGRES_USER: comstash
+      POSTGRES_PASSWORD: comstash
+      POSTGRES_DB: comstash
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5444:5432"
+      - "5432:5432"
 
 volumes:
   postgres_data:
