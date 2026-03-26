@@ -41,16 +41,8 @@ func loadPackage(filename string) (*Repository, error) {
 
 func storePackage(pkg *Package) {
 	extra, err := json.Marshal(pkg.Extra)
-	if err != nil { // @todo удалить эту проверку
-		log.Fatal("Ошибка сериализации Extra:", err)
-	}
-
-	var authors []models.Author
-	for _, author := range pkg.Authors {
-		authors = append(authors, models.Author{
-			Name:  author.Name,
-			Email: author.Email,
-		})
+	if err != nil {
+		log.Fatal(`JSON field "extra" serialization error:`, err)
 	}
 
 	rec := models.Package{
@@ -60,8 +52,8 @@ func storePackage(pkg *Package) {
 		Homepage:          pkg.Homepage,
 		Version:           pkg.Version,
 		VersionNormalized: pkg.VersionNormalized,
-		License:           nil, // @todo
-		Authors:           authors,
+		License:           nil,
+		Authors:           nil,
 		SourceUrl:         pkg.Source.URL,
 		SourceType:        pkg.Source.Type,
 		SourceReference:   pkg.Source.Reference,
@@ -76,9 +68,11 @@ func storePackage(pkg *Package) {
 		Extra:             datatypes.JSON(extra),
 	}
 
-	// DB insert/update
 	result := db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "name"}, {Name: "version"}},
+		Columns: []clause.Column{
+			{Name: "name"},
+			{Name: "version"},
+		},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"updated_at",
 			"description",
@@ -91,10 +85,36 @@ func storePackage(pkg *Package) {
 	}).Create(&rec)
 
 	if result.Error != nil {
-		log.Printf("Ошибка вставки: %v", result.Error)
+		log.Printf(`Error while insert "package" row: %v`, result.Error)
+		return
 	}
 
-	//fmt.Printf("Создана запись с ID: %d\n", rec.ID)
+	// ❗ важно: получить ID даже при UPSERT
+	if rec.ID == 0 {
+		db.Where("name = ? AND version = ?", pkg.Name, pkg.Version).First(&rec)
+	}
+
+	// 2. Вставляем authors уже с package_id
+	for _, author := range pkg.Authors {
+		a := models.Author{
+			Name:      author.Name,
+			Email:     author.Email,
+			PackageID: rec.ID,
+		}
+
+		err := db.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "name"},
+				{Name: "email"},
+				{Name: "package_id"},
+			},
+			DoNothing: true,
+		}).Create(&a).Error
+
+		if err != nil {
+			log.Printf("Ошибка вставки автора: %v", err)
+		}
+	}
 }
 
 func main() {
