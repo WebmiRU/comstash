@@ -76,7 +76,7 @@ func storePackage(pkg *Package) {
 		Extra:             datatypes.JSON(extra),
 	}
 
-	// Записываем в БД
+	// DB insert/update
 	result := db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "name"}, {Name: "version"}},
 		DoUpdates: clause.AssignmentColumns([]string{
@@ -148,7 +148,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var data []models.Package
-	result := db.Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).Find(&data)
+	result := db.Preload("Authors").Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).Find(&data)
 
 	if result.Error != nil {
 		log.Println(result.Error)
