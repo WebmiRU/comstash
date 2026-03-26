@@ -288,6 +288,8 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// @todo Calculate sha-hash and update DB packages.shasum column value
+
 			fmt.Printf("Package download success: %s/%s %s\n", vendor, pkg, version)
 		}
 
