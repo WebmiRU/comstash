@@ -1,0 +1,17 @@
+{
+  "repositories": [
+    {
+      "type": "composer",
+      "url": "http://localhost:8080"
+    },
+    {
+      "packagist.org": false
+    }
+  ],
+  "config": {
+    "secure-http": false
+  },
+  "require": {
+    "laravel/framework": "13.2.0"
+  }
+}

@@ -147,7 +147,7 @@ func main() {
 				p.Support.Source = supportSource
 			}
 
-			storePackage(&p)
+			//storePackage(&p)
 		}
 	}
 
@@ -159,15 +159,16 @@ func main() {
 
 	r := chi.NewRouter()
 	//r.Use(middleware.Compress(9, "application/json", "text/xml"))
+	r.Get("/packages.json", packages)
 	r.Get("/p2/{vendor}/{pkg}.json", vendorPackageHandler)
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	if err = http.ListenAndServe("0.0.0.0:8080", r); err != nil {
 		panic(err)
 	}
 }
 
 func packages(w http.ResponseWriter, r *http.Request) {
-
+	fmt.Fprintf(w, `{"packages":[], "metadata-url":"/p2/%%package%%.json"}`)
 }
 
 func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
@@ -179,20 +180,57 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	var data []models.Package
 	result := db.Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).Find(&data)
 
-	for _, v := range data {
-		fmt.Println(v.Name)
-	}
-
 	if result.Error != nil {
 		log.Println(result.Error)
 	}
 
 	fmt.Printf("Найдено версий: %d\n", len(data))
 
-	response := map[string]any{
-		"packages": map[string]any{
-			"vendor/package": data,
-		},
+	// @todo заранее создать массив нужной длины
+	var packages []Package
+
+	for _, v := range data {
+		packages = append(packages, Package{
+			Name:              v.Name,
+			Description:       v.Description,
+			Keywords:          nil,
+			Homepage:          v.Homepage,
+			Version:           v.Version,
+			VersionNormalized: v.VersionNormalized,
+			License:           nil,
+			Type:              v.Type,
+			Time:              v.Time,
+			Authors:           nil,
+			Source: Source{
+				URL:       v.SourceUrl,
+				Type:      v.SourceType,
+				Reference: v.SourceReference,
+			},
+			Dist: Dist{
+				URL:       v.DistUrl,
+				Type:      v.DistType,
+				Shasum:    v.DistShasum,
+				Reference: v.DistReference,
+			},
+			Support: Support{
+				Issues: v.SupportIssues,
+				Source: v.SupportSource,
+			},
+			Funding: nil,
+			Autoload: Autoload{
+				Files: nil,
+				Psr4:  nil,
+			},
+			Extra:      nil,
+			Require:    nil,
+			RequireDev: nil,
+			Suggest:    nil,
+		})
+	}
+
+	response := Repository{
+		Minified: "composer/2.0",
+		Packages: packages,
 	}
 
 	// 3. Кодируем напрямую в ResponseWriter через JSON v2
