@@ -156,8 +156,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Найдено версий: %d\n", len(data))
 
-	// @todo заранее создать массив нужной длины
-	var packages []Package
+	packages := make([]Package, 0, len(data))
 
 	for _, v := range data {
 		var extra map[string]any
