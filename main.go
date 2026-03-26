@@ -3,7 +3,9 @@ package main
 import (
 	"comstash/internal/models"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -89,12 +91,10 @@ func storePackage(pkg *Package) {
 		return
 	}
 
-	// ❗ важно: получить ID даже при UPSERT
 	if rec.ID == 0 {
 		db.Where("name = ? AND version = ?", pkg.Name, pkg.Version).First(&rec)
 	}
 
-	// 2. Вставляем authors уже с package_id
 	for _, author := range pkg.Authors {
 		a := models.Author{
 			Name:      author.Name,
@@ -121,7 +121,7 @@ func main() {
 	var err error
 	db, err = gorm.Open(postgres.Open("host=localhost user=compo password=compo dbname=compo port=5444 sslmode=disable"), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
-			SingularTable: true, // Отключает добавление "s" к именам таблиц
+			SingularTable: true,
 		},
 	})
 
@@ -138,7 +138,7 @@ func main() {
 		for _, p := range pkg {
 			p.Name = name
 
-			storePackage(&p)
+			//storePackage(&p)
 		}
 	}
 
@@ -151,6 +151,7 @@ func main() {
 	//r.Use(middleware.Compress(9, "application/json", "text/xml"))
 	r.Get("/packages.json", packages)
 	r.Get("/p2/{vendor}/{pkg}.json", vendorPackageHandler)
+	r.Get("/cache/{vendor}/{package}", cacheHandler)
 
 	if err = http.ListenAndServe("0.0.0.0:8080", r); err != nil {
 		panic(err)
@@ -158,6 +159,7 @@ func main() {
 }
 
 func packages(w http.ResponseWriter, r *http.Request) {
+	// @todo Заменить на json struct
 	fmt.Fprintf(w, `{"packages":[], "metadata-url":"/p2/%%package%%.json"}`)
 }
 
@@ -190,6 +192,11 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 				Name:  a.Name,
 				Email: a.Email,
 			})
+		}
+
+		// Replace original URL for our cache
+		if v.DistType == "zip" {
+			v.DistUrl = fmt.Sprintf("http://localhost:8080/cache/%s?v=%s", v.Name, v.Version) // @todo Change DOMAIN and PORT
 		}
 
 		packages = append(packages, Package{
@@ -242,6 +249,97 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func cacheHandler(w http.ResponseWriter, r *http.Request) {
+	//w.Header().Set("Content-Type", "application/json")
+	vendor := chi.URLParam(r, "vendor")
+	pkg := chi.URLParam(r, "package")
+	version := r.URL.Query().Get("v")
+
+	fmt.Println(vendor, pkg, version)
+
+	var row models.Package
+	result := db.Preload("Authors").Where("name = ? AND version = ?", fmt.Sprintf("%s/%s", vendor, pkg), version).First(&row)
+
+	if result.Error != nil {
+		log.Println(result.Error)
+	}
+
+	if row.ID == 0 {
+		http.Error(w, "Package or version not found", http.StatusNotFound)
+		return
+	}
+
+	switch row.DistType {
+	case "zip":
+		filename := fmt.Sprintf("cache/packages/%s/%s/%s.zip", vendor, pkg, version)
+		fmt.Println("FILENAME:", filename)
+		exists, err := fileExists(filename)
+		if err != nil {
+			http.Error(w, "", http.StatusInternalServerError)
+			return
+		}
+
+		if exists {
+			fmt.Println("YES!")
+		} else {
+			fmt.Println("NO!")
+			_, err := os.Create(filename)
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+	case "git":
+	// @todo
+
+	default:
+		log.Println("Unknown dist type:", row.DistType)
+		http.Error(w, "", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Println("TYPE:", row.Type)
+	//if fileExists(fmt.Sprintf("%s/%s", vendor, pkg)) {
+	//
+	//}
+
+	fmt.Println(11, row)
+}
+
+func fileExists(filename string) (bool, error) {
+	if _, err := os.Stat(filename); errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	} else {
+		return true, nil
+	}
+}
+
+func downloadFile(url string, filepath string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+
+	return err
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
