@@ -118,6 +118,7 @@ func storePackage(pkg *Package) {
 
 func main() {
 	var err error
+	// @todo DB config from ENV
 	db, err = gorm.Open(postgres.Open("host=localhost user=compo password=compo dbname=compo port=5444 sslmode=disable"), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
