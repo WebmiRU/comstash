@@ -8,9 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"net/http/httputil"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -349,54 +347,4 @@ func downloadFile(url string, filepath string) error {
 	_, err = io.Copy(out, resp.Body)
 
 	return err
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-
-	// --- ОТЛАДКА В КОНСОЛЬ ---
-	// Выводим весь запрос: метод, заголовки, путь
-	dump, _ := httputil.DumpRequest(r, false)
-	fmt.Printf("\n--- ВХОДЯЩИЙ ЗАПРОС ---\n%s\n", string(dump))
-
-	path := r.URL.Path
-	w.Header().Set("Content-Type", "application/json")
-
-	// --- ЛОГИКА РЕПОЗИТОРИЯ ---
-
-	// 1. Точка входа
-	if path == "/packages.json" {
-		fmt.Fprintf(w, `{"packages":[], "metadata-url":"/p2/%%package%%.json"}`)
-		return
-	}
-
-	// 2. Запрос метаданных пакета (V2 протокол)
-	if strings.HasPrefix(path, "/p2/") && strings.HasSuffix(path, ".json") {
-		// Извлекаем "vendor/package" из "/p2/vendor/package.json"
-		packageName := strings.TrimSuffix(strings.TrimPrefix(path, "/p2/"), ".json")
-
-		fmt.Printf(">>> Composer ищет метаданные для: %s\n", packageName)
-
-		// Пример динамического ответа для любого пакета
-		// В реальной жизни здесь будет поиск ZIP-файла в папке
-		fmt.Fprintf(w, `{
-			"packages": {
-				"%s": [
-					{
-						"name": "%s",
-						"version": "1.0.0",
-						"dist": {
-							"type": "zip",
-							"url": "http://localhost:8080/dist/%s-1.0.0.zip",
-							"reference": "v1.0.0"
-						},
-						"require": { "php": "^8.0" }
-					}
-				]
-			}
-		}`, packageName, packageName, strings.ReplaceAll(packageName, "/", "-"))
-		return
-	}
-
-	w.WriteHeader(http.StatusNotFound)
-	fmt.Fprintf(w, `{"error": "not found"}`)
 }
