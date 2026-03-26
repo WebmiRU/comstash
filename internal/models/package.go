@@ -12,6 +12,7 @@ type Package struct {
 	Version           string         `gorm:"type:text"`
 	VersionNormalized string         `gorm:"type:text"`
 	License           pq.StringArray `gorm:"column:license;type:text[]"`
+	Authors           []Author       `gorm:"foreignKey:PackageID"`
 	SourceUrl         string         `gorm:"type:text"`
 	SourceType        string         `gorm:"type:text"`
 	SourceReference   string         `gorm:"type:text"`

@@ -45,6 +45,14 @@ func storePackage(pkg *Package) {
 		log.Fatal("Ошибка сериализации Extra:", err)
 	}
 
+	var authors []models.Author
+	for _, author := range pkg.Authors {
+		authors = append(authors, models.Author{
+			Name:  author.Name,
+			Email: author.Email,
+		})
+	}
+
 	rec := models.Package{
 		Name:              pkg.Name,
 		Description:       pkg.Description,
@@ -52,6 +60,8 @@ func storePackage(pkg *Package) {
 		Homepage:          pkg.Homepage,
 		Version:           pkg.Version,
 		VersionNormalized: pkg.VersionNormalized,
+		License:           nil, // @todo
+		Authors:           authors,
 		SourceUrl:         pkg.Source.URL,
 		SourceType:        pkg.Source.Type,
 		SourceReference:   pkg.Source.Reference,
@@ -113,7 +123,6 @@ func main() {
 	}
 
 	var pkg models.Package
-	// Ищем по имени (Eloquent: Package::where('name', '...')->first())
 	db.Where("name = ?", "pack/1").First(&pkg)
 
 	fmt.Printf("Найдено в БД: ID=%d, Name=%s", pkg.ID, pkg.Name)
@@ -166,7 +175,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 			License:           v.License,
 			Type:              v.Type,
 			Time:              v.Time,
-			Authors:           nil,
+			Authors:           v.Authors,
 			Source: Source{
 				URL:       v.SourceUrl,
 				Type:      v.SourceType,
