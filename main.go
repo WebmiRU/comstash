@@ -43,7 +43,7 @@ func loadPackage(filename string) (*Repository, error) {
 func storePackage(pkg *Package) {
 	extra, err := json.Marshal(pkg.Extra)
 	if err != nil {
-		log.Fatal(`JSON field "extra" serialization error:`, err)
+		log.Fatal(`json field "extra" serialization error:`, err)
 	}
 
 	rec := models.Package{
@@ -86,7 +86,7 @@ func storePackage(pkg *Package) {
 	}).Create(&rec)
 
 	if result.Error != nil {
-		log.Printf(`Error while insert "package" row: %v`, result.Error)
+		log.Printf(`error while insert "package" row: %v`, result.Error)
 		return
 	}
 
@@ -114,12 +114,33 @@ func storePackage(pkg *Package) {
 			log.Printf("Ошибка вставки автора: %v", err)
 		}
 	}
+
+	for name, version := range pkg.Require {
+		require := models.Require{
+			Name:      name,
+			Version:   version,
+			PackageID: rec.ID,
+		}
+
+		err := db.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "name"},
+				{Name: "version"},
+				{Name: "package_id"},
+			},
+			DoNothing: true,
+		}).Create(&require).Error
+
+		if err != nil {
+			log.Printf("Ошибка вставки автора: %v", err)
+		}
+	}
 }
 
 func main() {
 	var err error
 	// @todo DB config from ENV
-	db, err = gorm.Open(postgres.Open("host=localhost user=compo password=compo dbname=compo port=5444 sslmode=disable"), &gorm.Config{
+	db, err = gorm.Open(postgres.Open("host=localhost user=compo password=compo dbname=compo port=5432 sslmode=disable"), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
@@ -165,13 +186,16 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var data []models.Package
-	result := db.Preload("Authors").Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).Find(&data)
+	// @debug
+	result := db.Preload("Authors").
+		Preload("Require").
+		Where("name = ? AND id = 1", fmt.Sprintf("%s/%s", vendor, pkg)).
+		Find(&data)
+	//result := db.Preload("Authors").Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).Find(&data)
 
 	if result.Error != nil {
 		log.Println(result.Error)
 	}
-
-	fmt.Printf("Найдено версий: %d\n", len(data))
 
 	packages := make([]Package, 0, len(data))
 
@@ -187,6 +211,11 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 				Name:  a.Name,
 				Email: a.Email,
 			})
+		}
+
+		require := map[string]string{}
+		for _, v1 := range v.Require {
+			require[v1.Name] = v1.Version
 		}
 
 		// Replace original URL for our cache
@@ -226,7 +255,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 				Psr4:  nil,
 			},
 			Extra:      extra,
-			Require:    nil,
+			Require:    require,
 			RequireDev: nil,
 			Suggest:    nil,
 		})
@@ -255,7 +284,10 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(vendor, pkg, version)
 
 	var row models.Package
-	result := db.Preload("Authors").Where("name = ? AND version = ?", fmt.Sprintf("%s/%s", vendor, pkg), version).First(&row)
+	result := db.Preload("Authors").
+		Preload("Require").
+		Where("name = ? AND version = ?", fmt.Sprintf("%s/%s", vendor, pkg), version).
+		First(&row)
 
 	if result.Error != nil {
 		log.Println(result.Error)
