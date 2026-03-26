@@ -141,13 +141,8 @@ func main() {
 		}
 	}
 
-	var pkg models.Package
-	db.Where("name = ?", "pack/1").First(&pkg)
-
-	fmt.Printf("Найдено в БД: ID=%d, Name=%s", pkg.ID, pkg.Name)
-
 	r := chi.NewRouter()
-	//r.Use(middleware.Compress(9, "application/json", "text/xml"))
+	//r.Use(middleware.Compress(9, "application/json", "text/xml")) // @todo Make compression level as ENV variable
 	r.Get("/packages.json", packages)
 	r.Get("/p2/{vendor}/{pkg}.json", vendorPackageHandler)
 	r.Get("/cache/{vendor}/{package}", cacheHandler)
