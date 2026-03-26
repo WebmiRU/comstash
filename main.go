@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/lib/pq"
 	"gorm.io/datatypes"
@@ -273,39 +274,43 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch row.DistType {
 	case "zip":
-		filename := fmt.Sprintf("cache/packages/%s/%s/%s.zip", vendor, pkg, version)
-		fmt.Println("FILENAME:", filename)
-		exists, err := fileExists(filename)
+		filepath := fmt.Sprintf("cache/packages/%s/%s/%s.zip", vendor, pkg, version)
+		fmt.Println("FILENAME:", filepath)
+		exists, err := fileExists(filepath)
 		if err != nil {
 			http.Error(w, "", http.StatusInternalServerError)
 			return
 		}
 
-		if exists {
-			fmt.Println("YES!")
-		} else {
-			fmt.Println("NO!")
-			_, err := os.Create(filename)
-			if err != nil {
-				log.Fatal(err)
+		if !exists {
+			if err = downloadFile(row.DistUrl, filepath); err != nil {
+				http.Error(w, "Package download error", http.StatusInternalServerError)
+				return
 			}
+
+			fmt.Printf("Package download success: %s/%s %s\n", vendor, pkg, version)
 		}
 
-	case "git":
-	// @todo
+		file, _ := os.Open(filepath)
+		defer file.Close()
+
+		stat, _ := file.Stat()
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
+
+		_, err = io.Copy(w, file)
+		if err != nil {
+			log.Printf("File send error: %v", err)
+		}
+
+	//case "git":
+	//@todo
 
 	default:
 		log.Println("Unknown dist type:", row.DistType)
 		http.Error(w, "", http.StatusInternalServerError)
 		return
 	}
-
-	fmt.Println("TYPE:", row.Type)
-	//if fileExists(fmt.Sprintf("%s/%s", vendor, pkg)) {
-	//
-	//}
-
-	fmt.Println(11, row)
 }
 
 func fileExists(filename string) (bool, error) {
@@ -319,7 +324,9 @@ func fileExists(filename string) (bool, error) {
 }
 
 func downloadFile(url string, filepath string) error {
-	resp, err := http.Get(url)
+	var client = &http.Client{Timeout: 300 * time.Second} // @todo Вынести таймаут в ENV-переменную
+
+	resp, err := client.Get(url)
 	if err != nil {
 		return err
 	}
@@ -388,7 +395,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Ошибка для всего остального
 	w.WriteHeader(http.StatusNotFound)
 	fmt.Fprintf(w, `{"error": "not found"}`)
 }
