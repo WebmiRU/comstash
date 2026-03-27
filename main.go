@@ -171,6 +171,15 @@ func main() {
 		panic(err)
 	}
 
+	//if err = db.AutoMigrate(
+	//	&models.Package{},
+	//	&models.Author{},
+	//	&models.Require{},
+	//	&models.RequireDev{},
+	//); err != nil {
+	//	log.Fatalf("db automigrate error: %v", err)
+	//}
+
 	j, err := loadPackage("laravel_framework.json")
 	if err != nil {
 		log.Fatalf("loading laravel_framework.json error: %v", err)
