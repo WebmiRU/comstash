@@ -26,4 +26,5 @@ type Package struct {
 	Time              string         `gorm:"type:text"`
 	Extra             datatypes.JSON `gorm:"type:jsonb"`
 	Require           []Require      `gorm:"foreignKey:PackageID"`
+	RequireDev        []RequireDev   `gorm:"foreignKey:PackageID"`
 }

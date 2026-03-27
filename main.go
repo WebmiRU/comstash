@@ -132,7 +132,28 @@ func storePackage(pkg *Package) {
 		}).Create(&require).Error
 
 		if err != nil {
-			log.Printf("Ошибка вставки автора: %v", err)
+			log.Printf("DB insert error: %v", err)
+		}
+	}
+
+	for name, version := range pkg.RequireDev {
+		require := models.RequireDev{
+			Name:      name,
+			Version:   version,
+			PackageID: rec.ID,
+		}
+
+		err := db.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "name"},
+				{Name: "version"},
+				{Name: "package_id"},
+			},
+			DoNothing: true,
+		}).Create(&require).Error
+
+		if err != nil {
+			log.Printf("DB insert error: %v", err)
 		}
 	}
 }
@@ -159,7 +180,7 @@ func main() {
 		for _, p := range pkg {
 			p.Name = name
 
-			//storePackage(&p)
+			storePackage(&p)
 		}
 	}
 
@@ -189,6 +210,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	// @debug
 	result := db.Preload("Authors").
 		Preload("Require").
+		Preload("RequireDev").
 		Where("name = ? AND id = 1", fmt.Sprintf("%s/%s", vendor, pkg)).
 		Find(&data)
 	//result := db.Preload("Authors").Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).Find(&data)
@@ -216,6 +238,11 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 		require := map[string]string{}
 		for _, v1 := range v.Require {
 			require[v1.Name] = v1.Version
+		}
+
+		requireDev := map[string]string{}
+		for _, v1 := range v.RequireDev {
+			requireDev[v1.Name] = v1.Version
 		}
 
 		// Replace original URL for our cache
@@ -256,7 +283,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 			},
 			Extra:      extra,
 			Require:    require,
-			RequireDev: nil,
+			RequireDev: requireDev,
 			Suggest:    nil,
 		})
 	}
