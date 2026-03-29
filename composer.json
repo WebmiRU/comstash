@@ -12,6 +12,8 @@
     "secure-http": false
   },
   "require": {
-    "laravel/framework": "13.1.0"
+    "laravel/framework": "12.35.1",
+    "laminas/laminas-escaper": "^2.18",
+    "psr/log": "^3.0"
   }
 }

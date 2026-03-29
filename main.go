@@ -11,14 +11,13 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/lib/pq"
 	"gorm.io/datatypes"
-	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/schema"
-
-	"github.com/go-chi/chi/v5"
 )
 
 var db *gorm.DB
@@ -161,7 +160,13 @@ func storePackage(pkg *Package) {
 func main() {
 	var err error
 	// @todo DB config from ENV
-	db, err = gorm.Open(postgres.Open("host=localhost user=compo password=compo dbname=compo port=5432 sslmode=disable"), &gorm.Config{
+	//db, err = gorm.Open(postgres.Open("host=localhost user=compo password=compo dbname=compo port=5432 sslmode=disable"), &gorm.Config{
+	//	NamingStrategy: schema.NamingStrategy{
+	//		SingularTable: true,
+	//	},
+	//})
+
+	db, err = gorm.Open(sqlite.Open("db"), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
@@ -199,6 +204,7 @@ func main() {
 	r.Get("/p2/{vendor}/{pkg}.json", vendorPackageHandler)
 	r.Get("/cache/{vendor}/{package}", cacheHandler)
 
+	fmt.Println("Server listening on :8080")
 	if err = http.ListenAndServe("0.0.0.0:8080", r); err != nil {
 		panic(err)
 	}
@@ -216,13 +222,13 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var data []models.Package
-	// @debug
+	// @debug Убрать ограничение "AND id = 1"
 	result := db.Preload("Authors").
 		Preload("Require").
 		Preload("RequireDev").
-		Where("name = ? AND id = 1", fmt.Sprintf("%s/%s", vendor, pkg)).
+		Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).
+		//Where("name = ? AND id = 1", fmt.Sprintf("%s/%s", vendor, pkg)).
 		Find(&data)
-	//result := db.Preload("Authors").Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).Find(&data)
 
 	if result.Error != nil {
 		log.Println(result.Error)
