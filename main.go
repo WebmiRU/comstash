@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 	"github.com/lib/pq"
 	"gorm.io/datatypes"
@@ -39,7 +40,7 @@ func loadPackage(filename string) (*Repository, error) {
 	return &repo, nil
 }
 
-func loadPackage2(packageName string) error {
+func getPackageData(packageName string) error {
 	url := fmt.Sprintf("https://packagist.org/p2/%s.json", packageName) // @todo ENV
 	client := &http.Client{Timeout: 20 * time.Second}                   // @todo ENV
 
@@ -293,7 +294,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	if len(data) == 0 {
 		fmt.Printf(`No packages "%s" found in local DB. Loading package data from "packagist.org"\n`, packageName)
 
-		err = loadPackage2(packageName)
+		err = getPackageData(packageName)
 		if err != nil {
 			log.Println(err) // @todo Возможно не хватает какой-то доп. обработки ошибок
 		}
@@ -359,11 +360,8 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 				Issues: v.SupportIssues,
 				Source: v.SupportSource,
 			},
-			Funding: nil,
-			Autoload: Autoload{
-				Files: nil,
-				Psr4:  nil,
-			},
+			Funding:    nil,
+			Autoload:   nil,
 			Extra:      extra,
 			Require:    require,
 			RequireDev: requireDev,
@@ -420,7 +418,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !exists {
-			fmt.Printf(`Package "%s" not found in cache, downloading...\n`, packageName)
+			fmt.Printf("Package %q not found in cache, downloading...\n", packageName)
 			// Create directory for package Cache
 			os.MkdirAll(fmt.Sprintf("cache/packages/%s", packageName), 0755)
 
@@ -431,7 +429,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 
 			// @todo Calculate sha-hash and update DB packages.shasum column value
 
-			fmt.Printf(`Package download success: "%s v%s"\n`, packageName, version)
+			fmt.Printf("Package %q %q download success\n", packageName, version)
 		}
 
 		file, _ := os.Open(filepath)
