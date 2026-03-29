@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/joho/godotenv"
 	"github.com/lib/pq"
 	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
@@ -201,6 +202,8 @@ func storePackage(tx *gorm.DB, pkg *Package) {
 }
 
 func main() {
+	_ = godotenv.Overload(".env")
+
 	var err error
 	db, err = gorm.Open(sqlite.Open("db"), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
@@ -245,8 +248,9 @@ func main() {
 	r.Get("/p2/{vendor}/{pkg}.json", vendorPackageHandler)
 	r.Get("/cache/{vendor}/{package}", cacheHandler)
 
-	fmt.Println("Server listening on :8080")
-	if err = http.ListenAndServe("0.0.0.0:8080", r); err != nil {
+	addr := fmt.Sprintf("%s:%s", os.Getenv("SERVER_IP"), os.Getenv("SERVER_PORT"))
+	fmt.Println(fmt.Sprintf("Server listening on %s", addr))
+	if err = http.ListenAndServe(addr, r); err != nil {
 		panic(err)
 	}
 }
@@ -256,26 +260,60 @@ func packages(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `{"packages":[], "metadata-url":"/p2/%%package%%.json"}`)
 }
 
+func getPackageFromDB(packageName string) (*models.Package, error) {
+	var data []models.Package
+
+	result := db.Preload("Authors").
+		Preload("Require").
+		Preload("RequireDev").
+		Where("name = ?", fmt.Sprintf("%s", packageName)).
+		Find(&data)
+
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return &data, nil
+}
+
 func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	vendor := chi.URLParam(r, "vendor")
 	pkg := chi.URLParam(r, "pkg")
 
 	w.Header().Set("Content-Type", "application/json")
 
-	var data []models.Package
-	// @debug Убрать ограничение "AND id = 1"
-	result := db.Preload("Authors").
-		Preload("Require").
-		Preload("RequireDev").
-		Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).
-		//Where("name = ? AND id = 1", fmt.Sprintf("%s/%s", vendor, pkg)).
-		Find(&data)
+	packageName := fmt.Sprintf("%s/%s", vendor, pkg)
+	//var data []models.Package
 
-	if result.Error != nil {
-		log.Println(result.Error)
+	data, err := getPackageFromDB(packageName)
+
+	//result := db.Preload("Authors").
+	//	Preload("Require").
+	//	Preload("RequireDev").
+	//	Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).
+	//	//Where("name = ? AND id = 1", fmt.Sprintf("%s/%s", vendor, pkg)).
+	//	Find(&data)
+	//
+	//if result.Error != nil {
+	//	log.Println(result.Error)
+	//}
+
+	packages := make([]Package, 0, len(*data))
+
+	if len(*data) == 0 {
+		fmt.Println(`No packages found in local DB. Loading package data from "packagist.org"`)
+
+		err := loadPackage2(fmt.Sprintf("%s/%s", vendor, pkg))
+		if err != nil {
+			log.Println(err) // @todo Возможно не хватает какой-то доп. обработки ошибок
+		}
+
+		//result = db.Preload("Authors").
+		//	Preload("Require").
+		//	Preload("RequireDev").
+		//	Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).
+		//	Find(&data)
 	}
-
-	packages := make([]Package, 0, len(data))
 
 	for _, v := range data {
 		var extra map[string]any
