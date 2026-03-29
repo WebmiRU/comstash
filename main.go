@@ -415,8 +415,18 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 
 	row, err := getPackageVersionFromDB(packageName, version)
 	if err != nil {
-		http.Error(w, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version), http.StatusNotFound)
-		return
+		fmt.Printf("Package %q version %q not found in local DB. Loading metadata from Packagist...\n", packageName, version)
+
+		if err = getPackageData(packageName); err != nil {
+			http.Error(w, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version), http.StatusNotFound)
+			return
+		}
+
+		row, err = getPackageVersionFromDB(packageName, version)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version), http.StatusNotFound)
+			return
+		}
 	}
 
 	switch row.DistType {
