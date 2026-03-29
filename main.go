@@ -14,7 +14,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
-	"github.com/lib/pq"
 	"golang.org/x/sync/singleflight"
 	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
@@ -66,6 +65,33 @@ func ensurePackageData(packageName string) error {
 	})
 
 	return err
+}
+
+func marshalStringSlice(values []string) (datatypes.JSON, error) {
+	if len(values) == 0 {
+		return []byte("[]"), nil
+	}
+
+	data, err := json.Marshal(values)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func unmarshalStringSlice(data datatypes.JSON) []string {
+	if len(data) == 0 {
+		return nil
+	}
+
+	var values []string
+	if err := json.Unmarshal(data, &values); err != nil {
+		log.Printf("string slice JSON unmarshal error: %v", err)
+		return nil
+	}
+
+	return values
 }
 
 func isNotFoundError(err error) bool {
@@ -142,6 +168,16 @@ func getPackageData(packageName string) error {
 }
 
 func storePackage(tx *gorm.DB, pkg *Package) error {
+	keywords, err := marshalStringSlice(pkg.Keywords)
+	if err != nil {
+		return fmt.Errorf(`JSON field "keywords" serialization error: %w`, err)
+	}
+
+	license, err := marshalStringSlice(pkg.License)
+	if err != nil {
+		return fmt.Errorf(`JSON field "license" serialization error: %w`, err)
+	}
+
 	extra, err := json.Marshal(pkg.Extra)
 	if err != nil {
 		return fmt.Errorf(`JSON field "extra" serialization error: %w`, err)
@@ -150,11 +186,11 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 	rec := models.Package{
 		Name:              pkg.Name,
 		Description:       pkg.Description,
-		Keywords:          pq.StringArray(pkg.Keywords),
+		Keywords:          keywords,
 		Homepage:          pkg.Homepage,
 		Version:           pkg.Version,
 		VersionNormalized: pkg.VersionNormalized,
-		License:           nil,
+		License:           license,
 		Authors:           nil,
 		SourceUrl:         pkg.Source.URL,
 		SourceType:        pkg.Source.Type,
@@ -417,11 +453,11 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 		packages = append(packages, Package{
 			Name:              v.Name,
 			Description:       v.Description,
-			Keywords:          v.Keywords,
+			Keywords:          unmarshalStringSlice(v.Keywords),
 			Homepage:          v.Homepage,
 			Version:           v.Version,
 			VersionNormalized: v.VersionNormalized,
-			License:           v.License,
+			License:           unmarshalStringSlice(v.License),
 			Type:              v.Type,
 			Time:              v.Time,
 			Authors:           authors,
