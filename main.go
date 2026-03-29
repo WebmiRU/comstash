@@ -18,6 +18,7 @@ import (
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
 
@@ -209,6 +210,13 @@ func main() {
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
+		Logger: gormlogger.New(
+			log.New(os.Stdout, "\r\n", log.LstdFlags),
+			gormlogger.Config{
+				LogLevel:                  gormlogger.Warn,
+				IgnoreRecordNotFoundError: true,
+			},
+		),
 	})
 
 	if err != nil {
@@ -274,6 +282,22 @@ func getPackageFromDB(packageName string) ([]models.Package, error) {
 	}
 
 	return data, nil
+}
+
+func getPackageVersionFromDB(packageName string, version string) (*models.Package, error) {
+	var data models.Package
+
+	result := db.Preload("Authors").
+		Preload("Require").
+		Preload("RequireDev").
+		Where("name = ? AND version = ?", packageName, version).
+		First(&data)
+
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return &data, nil
 }
 
 func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
@@ -389,19 +413,8 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 	packageName := fmt.Sprintf("%s/%s", vendor, pkg)
 	version := r.URL.Query().Get("v")
 
-	fmt.Println(vendor, pkg, version)
-
-	var row models.Package
-	result := db.Preload("Authors").
-		Preload("Require").
-		Where("name = ? AND version = ?", fmt.Sprintf("%s/%s", vendor, pkg), version).
-		First(&row)
-
-	if result.Error != nil {
-		log.Println(result.Error)
-	}
-
-	if row.ID == 0 {
+	row, err := getPackageVersionFromDB(packageName, version)
+	if err != nil {
 		http.Error(w, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version), http.StatusNotFound)
 		return
 	}
