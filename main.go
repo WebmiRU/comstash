@@ -11,7 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 	"github.com/lib/pq"
 	"gorm.io/datatypes"
@@ -292,7 +291,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	packages := make([]Package, 0, len(data))
 
 	if len(data) == 0 {
-		fmt.Println(`No packages found in local DB. Loading package data from "packagist.org"`)
+		fmt.Printf(`No packages "%s" found in local DB. Loading package data from "packagist.org"\n`, packageName)
 
 		err = loadPackage2(packageName)
 		if err != nil {
@@ -389,6 +388,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 	//w.Header().Set("Content-Type", "application/json")
 	vendor := chi.URLParam(r, "vendor")
 	pkg := chi.URLParam(r, "package")
+	packageName := fmt.Sprintf("%s/%s", vendor, pkg)
 	version := r.URL.Query().Get("v")
 
 	fmt.Println(vendor, pkg, version)
@@ -404,7 +404,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if row.ID == 0 {
-		http.Error(w, "Package or version not found", http.StatusNotFound)
+		http.Error(w, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version), http.StatusNotFound)
 		return
 	}
 
@@ -412,7 +412,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 	case "zip":
 		packageName := fmt.Sprintf("%s/%s", vendor, pkg)
 		filepath := fmt.Sprintf("cache/packages/%s/%s.zip", packageName, version)
-		fmt.Println("FILENAME:", filepath)
+
 		exists, err := fileExists(filepath)
 		if err != nil {
 			http.Error(w, "", http.StatusInternalServerError)
@@ -422,7 +422,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 		if !exists {
 			fmt.Printf(`Package "%s" not found in cache, downloading...\n`, packageName)
 			// Create directory for package Cache
-			os.MkdirAll(fmt.Sprintf("cache/packages/%s/%s", vendor, pkg), 0755)
+			os.MkdirAll(fmt.Sprintf("cache/packages/%s", packageName), 0755)
 
 			if err = downloadFile(row.DistUrl, filepath); err != nil {
 				http.Error(w, "Package download error", http.StatusInternalServerError)
@@ -431,7 +431,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 
 			// @todo Calculate sha-hash and update DB packages.shasum column value
 
-			fmt.Printf("Package download success: %s/%s %s\n", vendor, pkg, version)
+			fmt.Printf(`Package download success: "%s v%s"\n`, packageName, version)
 		}
 
 		file, _ := os.Open(filepath)
