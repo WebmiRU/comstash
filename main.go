@@ -297,6 +297,17 @@ func getPackageVersionFromDB(packageName string, version string) (*models.Packag
 	return &data, nil
 }
 
+func getPackageMetaFromDB(packageName string, version string) (*models.Package, error) {
+	var data models.Package
+
+	result := db.Where("name = ? AND version = ?", packageName, version).First(&data)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return &data, nil
+}
+
 func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	vendor := chi.URLParam(r, "vendor")
 	pkg := chi.URLParam(r, "pkg")
@@ -410,7 +421,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 	packageName := fmt.Sprintf("%s/%s", vendor, pkg)
 	version := r.URL.Query().Get("v")
 
-	row, err := getPackageVersionFromDB(packageName, version)
+	row, err := getPackageMetaFromDB(packageName, version)
 	if err != nil {
 		fmt.Printf("Package %q version %q not found in local DB. Loading metadata from Packagist...\n", packageName, version)
 
@@ -419,7 +430,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		row, err = getPackageVersionFromDB(packageName, version)
+		row, err = getPackageMetaFromDB(packageName, version)
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version), http.StatusNotFound)
 			return
@@ -509,14 +520,37 @@ func downloadFile(url string, filepath string) error {
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
 
-	out, err := os.Create(filepath)
+	tmpPath := filepath + ".part"
+	_ = os.Remove(tmpPath)
+
+	out, err := os.Create(tmpPath)
 	if err != nil {
 		return err
 	}
 
-	defer out.Close()
+	defer func() {
+		out.Close()
+		if err != nil {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
 	_, err = io.Copy(out, resp.Body)
+	if err != nil {
+		return err
+	}
 
-	return err
+	if err = out.Sync(); err != nil {
+		return err
+	}
+
+	if err = out.Close(); err != nil {
+		return err
+	}
+
+	if err = os.Rename(tmpPath, filepath); err != nil {
+		return err
+	}
+
+	return nil
 }
