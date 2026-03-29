@@ -410,7 +410,8 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch row.DistType {
 	case "zip":
-		filepath := fmt.Sprintf("cache/packages/%s/%s/%s.zip", vendor, pkg, version)
+		packageName := fmt.Sprintf("%s/%s", vendor, pkg)
+		filepath := fmt.Sprintf("cache/packages/%s/%s.zip", packageName, version)
 		fmt.Println("FILENAME:", filepath)
 		exists, err := fileExists(filepath)
 		if err != nil {
@@ -419,6 +420,10 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !exists {
+			fmt.Printf(`Package "%s" not found in cache, downloading...\n`, packageName)
+			// Create directory for package Cache
+			os.MkdirAll(fmt.Sprintf("cache/packages/%s/%s", vendor, pkg), 0755)
+
 			if err = downloadFile(row.DistUrl, filepath); err != nil {
 				http.Error(w, "Package download error", http.StatusInternalServerError)
 				return

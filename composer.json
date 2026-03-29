@@ -13,7 +13,6 @@
   },
   "require": {
     "laravel/framework": "12.35.1",
-    "laminas/laminas-escaper": "^2.18",
-    "psr/log": "^3.0"
+    "laminas/laminas-escaper": "^2.18"
   }
 }
