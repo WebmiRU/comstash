@@ -5,7 +5,7 @@ import "github.com/lib/pq"
 
 type Package struct {
 	ID                uint           `gorm:"primaryKey"`
-	Name              string         `gorm:"uniqueIndex:idx_package_name_version"`
+	Name              string         `gorm:"uniqueIndex:idx_package_name_version;index;type:text COLLATE NOCASE"`
 	Description       string         `gorm:"type:text"`
 	Keywords          pq.StringArray `gorm:"column:keywords;type:text[]"`
 	Homepage          string         `gorm:"type:text"`

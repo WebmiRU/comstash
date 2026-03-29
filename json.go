@@ -19,7 +19,7 @@ type Package struct {
 	Source            Source            `json:"source"`
 	Dist              Dist              `json:"dist"`
 	Support           Support           `json:"support"`
-	Funding           []any             `json:"funding"`
+	Funding           any               `json:"funding"`
 	Autoload          Autoload          `json:"autoload"`
 	Extra             map[string]any    `json:"extra"`
 	Require           map[string]string `json:"require"`

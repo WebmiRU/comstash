@@ -39,7 +39,50 @@ func loadPackage(filename string) (*Repository, error) {
 	return &repo, nil
 }
 
-func storePackage(pkg *Package) {
+func loadPackage2(packageName string) error {
+	url := fmt.Sprintf("https://packagist.org/p2/%s.json", packageName) // @todo ENV
+	client := &http.Client{Timeout: 20 * time.Second}                   // @todo ENV
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return errors.New(fmt.Sprintf("server response error, status code: %d", resp.StatusCode))
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+
+	var repo Repository
+
+	err = json.Unmarshal(body, &repo)
+	if err != nil {
+		return fmt.Errorf("json unmarshal error: %w", err)
+	}
+
+	fmt.Printf("Loaded package: %s. Versions count: %d. Updating DB\n", packageName, len(repo.Packages[packageName]))
+
+	if err = db.Transaction(func(tx *gorm.DB) error {
+		for name, pkg := range repo.Packages {
+			for _, p := range pkg {
+				p.Name = name
+				storePackage(tx, &p)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	fmt.Println("DB successfully updated")
+
+	return nil
+}
+
+func storePackage(tx *gorm.DB, pkg *Package) {
 	extra, err := json.Marshal(pkg.Extra)
 	if err != nil {
 		log.Fatal(`json field "extra" serialization error:`, err)
@@ -68,7 +111,7 @@ func storePackage(pkg *Package) {
 		Extra:             datatypes.JSON(extra),
 	}
 
-	result := db.Clauses(clause.OnConflict{
+	result := tx.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "name"},
 			{Name: "version"},
@@ -90,7 +133,7 @@ func storePackage(pkg *Package) {
 	}
 
 	if rec.ID == 0 {
-		db.Where("name = ? AND version = ?", pkg.Name, pkg.Version).First(&rec)
+		tx.Where("name = ? AND version = ?", pkg.Name, pkg.Version).First(&rec)
 	}
 
 	for _, author := range pkg.Authors {
@@ -100,7 +143,7 @@ func storePackage(pkg *Package) {
 			PackageID: rec.ID,
 		}
 
-		err := db.Clauses(clause.OnConflict{
+		err := tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{
 				{Name: "name"},
 				{Name: "email"},
@@ -121,7 +164,7 @@ func storePackage(pkg *Package) {
 			PackageID: rec.ID,
 		}
 
-		err := db.Clauses(clause.OnConflict{
+		err := tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{
 				{Name: "name"},
 				{Name: "version"},
@@ -142,7 +185,7 @@ func storePackage(pkg *Package) {
 			PackageID: rec.ID,
 		}
 
-		err := db.Clauses(clause.OnConflict{
+		err := tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{
 				{Name: "name"},
 				{Name: "version"},
@@ -159,13 +202,6 @@ func storePackage(pkg *Package) {
 
 func main() {
 	var err error
-	// @todo DB config from ENV
-	//db, err = gorm.Open(postgres.Open("host=localhost user=compo password=compo dbname=compo port=5432 sslmode=disable"), &gorm.Config{
-	//	NamingStrategy: schema.NamingStrategy{
-	//		SingularTable: true,
-	//	},
-	//})
-
 	db, err = gorm.Open(sqlite.Open("db"), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
@@ -190,12 +226,17 @@ func main() {
 		log.Fatalf("loading laravel_framework.json error: %v", err)
 	}
 
-	for name, pkg := range j.Packages {
-		for _, p := range pkg {
-			p.Name = name
-
-			storePackage(&p)
+	if err = db.Transaction(func(tx *gorm.DB) error {
+		for name, pkg := range j.Packages {
+			for _, p := range pkg {
+				p.Name = name
+				storePackage(tx, &p)
+			}
 		}
+
+		return nil
+	}); err != nil {
+		log.Fatalf("package import transaction error: %v", err)
 	}
 
 	r := chi.NewRouter()
