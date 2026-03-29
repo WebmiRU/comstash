@@ -51,23 +51,6 @@ func ensurePackageData(packageName string) error {
 	return err
 }
 
-func loadPackage(filename string) (*Repository, error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, fmt.Errorf("read file error: %w", err)
-	}
-
-	var repo Repository
-
-	// Опция RejectUnknownMembers(true) выдаст ошибку, если в JSON есть поля, которых нет в структуре (полезно для строгой валидации)
-	err = json.Unmarshal(data, &repo)
-	if err != nil {
-		return nil, fmt.Errorf("json v2 unmarshal error: %w", err)
-	}
-
-	return &repo, nil
-}
-
 func getPackageData(packageName string) error {
 	url := fmt.Sprintf("https://packagist.org/p2/%s.json", packageName) // @todo ENV
 	client := &http.Client{Timeout: 20 * time.Second}                   // @todo ENV
@@ -263,26 +246,6 @@ func main() {
 	//); err != nil {
 	//	log.Fatalf("db automigrate error: %v", err)
 	//}
-
-	j, err := loadPackage("laravel_framework.json")
-	if err != nil {
-		log.Fatalf("loading laravel_framework.json error: %v", err)
-	}
-
-	if err = db.Transaction(func(tx *gorm.DB) error {
-		for name, pkg := range j.Packages {
-			for _, p := range pkg {
-				p.Name = name
-				if err := storePackage(tx, &p); err != nil {
-					return err
-				}
-			}
-		}
-
-		return nil
-	}); err != nil {
-		log.Fatalf("package import transaction error: %v", err)
-	}
 
 	r := chi.NewRouter()
 	//r.Use(middleware.Compress(9, "application/json", "text/xml")) // @todo Make compression level as ENV variable
