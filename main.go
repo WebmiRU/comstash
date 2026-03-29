@@ -260,7 +260,7 @@ func packages(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, `{"packages":[], "metadata-url":"/p2/%%package%%.json"}`)
 }
 
-func getPackageFromDB(packageName string) (*models.Package, error) {
+func getPackageFromDB(packageName string) ([]models.Package, error) {
 	var data []models.Package
 
 	result := db.Preload("Authors").
@@ -273,7 +273,7 @@ func getPackageFromDB(packageName string) (*models.Package, error) {
 		return nil, result.Error
 	}
 
-	return &data, nil
+	return data, nil
 }
 
 func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
@@ -283,36 +283,26 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	packageName := fmt.Sprintf("%s/%s", vendor, pkg)
-	//var data []models.Package
 
 	data, err := getPackageFromDB(packageName)
+	if err != nil {
+		log.Println(err)
+	}
 
-	//result := db.Preload("Authors").
-	//	Preload("Require").
-	//	Preload("RequireDev").
-	//	Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).
-	//	//Where("name = ? AND id = 1", fmt.Sprintf("%s/%s", vendor, pkg)).
-	//	Find(&data)
-	//
-	//if result.Error != nil {
-	//	log.Println(result.Error)
-	//}
+	packages := make([]Package, 0, len(data))
 
-	packages := make([]Package, 0, len(*data))
-
-	if len(*data) == 0 {
+	if len(data) == 0 {
 		fmt.Println(`No packages found in local DB. Loading package data from "packagist.org"`)
 
-		err := loadPackage2(fmt.Sprintf("%s/%s", vendor, pkg))
+		err = loadPackage2(packageName)
 		if err != nil {
 			log.Println(err) // @todo Возможно не хватает какой-то доп. обработки ошибок
 		}
 
-		//result = db.Preload("Authors").
-		//	Preload("Require").
-		//	Preload("RequireDev").
-		//	Where("name = ?", fmt.Sprintf("%s/%s", vendor, pkg)).
-		//	Find(&data)
+		data, err = getPackageFromDB(packageName)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 
 	for _, v := range data {
@@ -382,7 +372,6 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	packageName := fmt.Sprintf("%s/%s", vendor, pkg)
 	response := Repository{
 		Minified: "composer/2.0",
 		Packages: map[string][]Package{
@@ -390,7 +379,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	err := json.MarshalWrite(w, response)
+	err = json.MarshalWrite(w, response)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
