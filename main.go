@@ -27,6 +27,23 @@ import (
 var db *gorm.DB
 var packageLoadGroup singleflight.Group
 
+type upstreamError struct {
+	StatusCode int
+	Err        error
+}
+
+func (e *upstreamError) Error() string {
+	if e.Err == nil {
+		return fmt.Sprintf("upstream error, status code: %d", e.StatusCode)
+	}
+
+	return fmt.Sprintf("upstream error, status code: %d: %v", e.StatusCode, e.Err)
+}
+
+func (e *upstreamError) Unwrap() error {
+	return e.Err
+}
+
 func requestBaseURL(r *http.Request) string {
 	if baseURL := os.Getenv("SERVER_BASE_URL"); baseURL != "" {
 		return strings.TrimRight(baseURL, "/")
@@ -51,6 +68,31 @@ func ensurePackageData(packageName string) error {
 	return err
 }
 
+func isNotFoundError(err error) bool {
+	return errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+func writeHTTPError(w http.ResponseWriter, err error, notFoundMsg string) {
+	switch {
+	case err == nil:
+		return
+	case isNotFoundError(err):
+		http.Error(w, notFoundMsg, http.StatusNotFound)
+	case errors.As(err, new(*upstreamError)):
+		var upstreamErr *upstreamError
+		_ = errors.As(err, &upstreamErr)
+		if upstreamErr.StatusCode == http.StatusNotFound {
+			http.Error(w, notFoundMsg, http.StatusNotFound)
+			return
+		}
+		log.Printf("upstream error: %v", err)
+		http.Error(w, "Upstream package source error", http.StatusBadGateway)
+	default:
+		log.Printf("internal error: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 func getPackageData(packageName string) error {
 	url := fmt.Sprintf("https://packagist.org/p2/%s.json", packageName) // @todo ENV
 	client := &http.Client{Timeout: 20 * time.Second}                   // @todo ENV
@@ -62,10 +104,13 @@ func getPackageData(packageName string) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return errors.New(fmt.Sprintf("server response error, status code: %d", resp.StatusCode))
+		return &upstreamError{StatusCode: resp.StatusCode}
 	}
 
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read upstream response error: %w", err)
+	}
 
 	var repo Repository
 
@@ -318,7 +363,8 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 
 	data, err := getPackageFromDB(packageName)
 	if err != nil {
-		log.Println(err)
+		writeHTTPError(w, err, fmt.Sprintf(`Package "%s" not found`, packageName))
+		return
 	}
 
 	packages := make([]Package, 0, len(data))
@@ -328,12 +374,14 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 
 		err = ensurePackageData(packageName)
 		if err != nil {
-			log.Println(err) // @todo Возможно не хватает какой-то доп. обработки ошибок
+			writeHTTPError(w, err, fmt.Sprintf(`Package "%s" not found`, packageName))
+			return
 		}
 
 		data, err = getPackageFromDB(packageName)
 		if err != nil {
-			log.Println(err)
+			writeHTTPError(w, err, fmt.Sprintf(`Package "%s" not found`, packageName))
+			return
 		}
 	}
 
@@ -423,16 +471,21 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 
 	row, err := getPackageMetaFromDB(packageName, version)
 	if err != nil {
+		if !isNotFoundError(err) {
+			writeHTTPError(w, err, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version))
+			return
+		}
+
 		fmt.Printf("Package %q version %q not found in local DB. Loading metadata from Packagist...\n", packageName, version)
 
 		if err = ensurePackageData(packageName); err != nil {
-			http.Error(w, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version), http.StatusNotFound)
+			writeHTTPError(w, err, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version))
 			return
 		}
 
 		row, err = getPackageMetaFromDB(packageName, version)
 		if err != nil {
-			http.Error(w, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version), http.StatusNotFound)
+			writeHTTPError(w, err, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version))
 			return
 		}
 	}
