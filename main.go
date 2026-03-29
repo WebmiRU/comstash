@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -23,6 +24,22 @@ import (
 )
 
 var db *gorm.DB
+
+func requestBaseURL(r *http.Request) string {
+	if baseURL := os.Getenv("SERVER_BASE_URL"); baseURL != "" {
+		return strings.TrimRight(baseURL, "/")
+	}
+
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if forwardedProto := r.Header.Get("X-Forwarded-Proto"); forwardedProto != "" {
+		scheme = forwardedProto
+	}
+
+	return fmt.Sprintf("%s://%s", scheme, r.Host)
+}
 
 func loadPackage(filename string) (*Repository, error) {
 	data, err := os.ReadFile(filename)
@@ -70,7 +87,9 @@ func getPackageData(packageName string) error {
 		for name, pkg := range repo.Packages {
 			for _, p := range pkg {
 				p.Name = name
-				storePackage(tx, &p)
+				if err := storePackage(tx, &p); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -84,10 +103,10 @@ func getPackageData(packageName string) error {
 	return nil
 }
 
-func storePackage(tx *gorm.DB, pkg *Package) {
+func storePackage(tx *gorm.DB, pkg *Package) error {
 	extra, err := json.Marshal(pkg.Extra)
 	if err != nil {
-		log.Fatal(`json field "extra" serialization error:`, err)
+		return fmt.Errorf(`JSON field "extra" serialization error: %w`, err)
 	}
 
 	rec := models.Package{
@@ -130,12 +149,13 @@ func storePackage(tx *gorm.DB, pkg *Package) {
 	}).Create(&rec)
 
 	if result.Error != nil {
-		log.Printf(`error while insert "package" row: %v`, result.Error)
-		return
+		return fmt.Errorf(`error while insert "package" row: %w`, result.Error)
 	}
 
 	if rec.ID == 0 {
-		tx.Where("name = ? AND version = ?", pkg.Name, pkg.Version).First(&rec)
+		if err = tx.Where("name = ? AND version = ?", pkg.Name, pkg.Version).First(&rec).Error; err != nil {
+			return fmt.Errorf(`error while load inserted "package" row: %w`, err)
+		}
 	}
 
 	for _, author := range pkg.Authors {
@@ -155,7 +175,7 @@ func storePackage(tx *gorm.DB, pkg *Package) {
 		}).Create(&a).Error
 
 		if err != nil {
-			log.Printf("Ошибка вставки автора: %v", err)
+			return fmt.Errorf("error while insert author: %w", err)
 		}
 	}
 
@@ -176,7 +196,7 @@ func storePackage(tx *gorm.DB, pkg *Package) {
 		}).Create(&require).Error
 
 		if err != nil {
-			log.Printf("DB insert error: %v", err)
+			return fmt.Errorf("error while insert require: %w", err)
 		}
 	}
 
@@ -197,9 +217,11 @@ func storePackage(tx *gorm.DB, pkg *Package) {
 		}).Create(&require).Error
 
 		if err != nil {
-			log.Printf("DB insert error: %v", err)
+			return fmt.Errorf("error while insert require-dev: %w", err)
 		}
 	}
+
+	return nil
 }
 
 func main() {
@@ -241,7 +263,9 @@ func main() {
 		for name, pkg := range j.Packages {
 			for _, p := range pkg {
 				p.Name = name
-				storePackage(tx, &p)
+				if err := storePackage(tx, &p); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -355,7 +379,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Replace original URL for our cache
 		if v.DistType == "zip" {
-			v.DistUrl = fmt.Sprintf("http://localhost:8080/cache/%s?v=%s", v.Name, v.Version) // @todo Change DOMAIN and PORT
+			v.DistUrl = fmt.Sprintf("%s/cache/%s?v=%s", requestBaseURL(r), v.Name, v.Version)
 		}
 
 		packages = append(packages, Package{
@@ -443,7 +467,10 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 		if !exists {
 			fmt.Printf("Package %q not found in cache, downloading...\n", packageName)
 			// Create directory for package Cache
-			os.MkdirAll(fmt.Sprintf("cache/packages/%s", packageName), 0755)
+			if err = os.MkdirAll(fmt.Sprintf("cache/packages/%s", packageName), 0755); err != nil {
+				http.Error(w, "Package cache directory create error", http.StatusInternalServerError)
+				return
+			}
 
 			if err = downloadFile(row.DistUrl, filepath); err != nil {
 				http.Error(w, "Package download error", http.StatusInternalServerError)
@@ -455,10 +482,18 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 			fmt.Printf("Package %q version %q download success\n", packageName, version)
 		}
 
-		file, _ := os.Open(filepath)
+		file, err := os.Open(filepath)
+		if err != nil {
+			http.Error(w, "Package open error", http.StatusInternalServerError)
+			return
+		}
 		defer file.Close()
 
-		stat, _ := file.Stat()
+		stat, err := file.Stat()
+		if err != nil {
+			http.Error(w, "Package stat error", http.StatusInternalServerError)
+			return
+		}
 		w.Header().Set("Content-Type", "application/zip")
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
 
