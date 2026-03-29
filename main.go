@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/joho/godotenv"
 	"github.com/lib/pq"
+	"golang.org/x/sync/singleflight"
 	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -24,6 +25,7 @@ import (
 )
 
 var db *gorm.DB
+var packageLoadGroup singleflight.Group
 
 func requestBaseURL(r *http.Request) string {
 	if baseURL := os.Getenv("SERVER_BASE_URL"); baseURL != "" {
@@ -39,6 +41,14 @@ func requestBaseURL(r *http.Request) string {
 	}
 
 	return fmt.Sprintf("%s://%s", scheme, r.Host)
+}
+
+func ensurePackageData(packageName string) error {
+	_, err, _ := packageLoadGroup.Do(packageName, func() (any, error) {
+		return nil, getPackageData(packageName)
+	})
+
+	return err
 }
 
 func loadPackage(filename string) (*Repository, error) {
@@ -342,7 +352,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	if len(data) == 0 {
 		fmt.Printf(`No packages "%s" found in local DB. Loading package data from "packagist.org"\n`, packageName)
 
-		err = getPackageData(packageName)
+		err = ensurePackageData(packageName)
 		if err != nil {
 			log.Println(err) // @todo Возможно не хватает какой-то доп. обработки ошибок
 		}
@@ -441,7 +451,7 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fmt.Printf("Package %q version %q not found in local DB. Loading metadata from Packagist...\n", packageName, version)
 
-		if err = getPackageData(packageName); err != nil {
+		if err = ensurePackageData(packageName); err != nil {
 			http.Error(w, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version), http.StatusNotFound)
 			return
 		}
