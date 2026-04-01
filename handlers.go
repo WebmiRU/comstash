@@ -87,7 +87,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 	packages := make([]Package, 0, len(data))
 
 	if len(data) == 0 {
-		fmt.Printf(`No packages "%s" found in local DB. Loading package data from "packagist.org"\n`, packageName)
+		fmt.Printf("No packages %q found in local DB. Loading package data from Packagist...\n", packageName)
 
 		err = ensurePackageData(packageName)
 		if err != nil {
@@ -99,6 +99,29 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			writeHTTPError(w, err, fmt.Sprintf(`Package "%s" not found`, packageName))
 			return
+		}
+	} else {
+		ttl, enabled, ttlErr := packageCacheTTL()
+		if ttlErr != nil {
+			log.Printf("package cache ttl config error: %v", ttlErr)
+		} else if enabled {
+			lastFetchedAt, ttlLookupErr := getPackageLastFetchedAt(packageName)
+			switch {
+			case ttlLookupErr == nil && time.Since(*lastFetchedAt) >= ttl:
+				go func() {
+					if err := ensurePackageData(packageName); err != nil {
+						log.Printf("background package refresh failed for %q: %v", packageName, err)
+					}
+				}()
+			case isNotFoundError(ttlLookupErr):
+				go func() {
+					if err := ensurePackageData(packageName); err != nil {
+						log.Printf("background package refresh failed for %q: %v", packageName, err)
+					}
+				}()
+			case ttlLookupErr != nil:
+				log.Printf("package cache ttl lookup error for %q: %v", packageName, ttlLookupErr)
+			}
 		}
 	}
 

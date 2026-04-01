@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
+	"strings"
+	"time"
 
 	"gorm.io/datatypes"
 	"gorm.io/driver/postgres"
@@ -383,4 +386,54 @@ func getPackageMetaFromDB(packageName string, version string) (*models.Package, 
 	}
 
 	return &data, nil
+}
+
+func getPackageLastFetchedAt(packageName string) (*time.Time, error) {
+	var row models.PackageCacheTTL
+
+	result := db.Where("package_name = ?", packageName).First(&row)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return &row.LastFetchedAt, nil
+}
+
+func updatePackageLastFetchedAt(tx *gorm.DB, packageName string, fetchedAt time.Time) error {
+	row := models.PackageCacheTTL{
+		PackageName:   packageName,
+		LastFetchedAt: fetchedAt.UTC(),
+	}
+
+	if err := tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{
+			{Name: "package_name"},
+		},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"last_fetched_at",
+		}),
+	}).Create(&row).Error; err != nil {
+		return fmt.Errorf(`error while upsert "package_cache_ttl" row: %w`, err)
+	}
+
+	return nil
+}
+
+func packageCacheTTL() (time.Duration, bool, error) {
+	raw := strings.TrimSpace(os.Getenv("PACKAGIST_CACHE_TTL"))
+	if raw == "" {
+		return 0, false, nil
+	}
+
+	value := strings.Fields(raw)[0]
+	minutes, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, false, fmt.Errorf("invalid PACKAGIST_CACHE_TTL %q: %w", raw, err)
+	}
+
+	if minutes <= 0 {
+		return 0, false, nil
+	}
+
+	return time.Duration(minutes) * time.Minute, true, nil
 }

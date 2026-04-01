@@ -96,6 +96,10 @@ func getPackageData(packageName string) error {
 			}
 		}
 
+		if err := updatePackageLastFetchedAt(tx, packageName, time.Now()); err != nil {
+			return err
+		}
+
 		return nil
 	}); err != nil {
 		return err
