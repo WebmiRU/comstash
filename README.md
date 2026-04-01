@@ -1,15 +1,16 @@
-# Comstash - private proxy/cache composer repository
-for [Kubernetes](https://kubernetes.io), [Nomad](https://www.hashicorp.com/en/products/nomad), local usage and other cases
+# Comstash - Private Composer Proxy/Cache
 
-## Changelist:
-- v0.1 first release
+A private Composer proxy/cache for [Kubernetes](https://kubernetes.io), [Nomad](https://www.hashicorp.com/en/products/nomad), local development, and similar use cases.
 
-## Todo (Roadmap)
-- Add API & Admin panel
-- Add PostgreSQL support
-- Add cache lifetime for packages
-- Add Kubernetes configs and/or Helm chart
-- Add Nomad config
+## Changelog
+- v0.1: first release
+
+## Roadmap
+- Add an API and admin panel
+- Finish PostgreSQL support
+- Add cache expiration for packages
+- Add Kubernetes manifests and/or a Helm chart
+- Add Nomad configuration
 - Add Git-based package support for packages without a dist URL
 - Add Nginx to serve static ZIP archives for slow clients
 
@@ -23,14 +24,14 @@ Install Atlas:
 curl -sSf https://atlasgo.sh | sh
 ```
 
-Apply migrations:
+Apply SQLite migrations:
 
 ```bash
 atlas migrate hash --dir "file://migrations/sqlite"
 atlas migrate apply --env sqlite
 ```
 
-For PostgreSQL:
+Apply PostgreSQL migrations:
 
 ```bash
 atlas migrate hash --dir "file://migrations/postgres"
