@@ -10,6 +10,8 @@ for [Kubernetes](https://kubernetes.io), [Nomad](https://www.hashicorp.com/en/pr
 - Add cache lifetime for packages
 - Add Kubernetes configs and/or Helm chart
 - Add Nomad config
+- Add Git-based package support for packages without a dist URL
+- Add Nginx to serve static ZIP archives for slow clients
 
 ## Database
 
