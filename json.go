@@ -17,10 +17,10 @@ type Package struct {
 	VersionNormalized string    `json:"version_normalized"`
 	License           []string  `json:"license,omitzero"`
 	Type              string    `json:"type,omitzero"`
-	Time              string    `json:"time"`
+	Time              string    `json:"time,omitzero"`
 	Authors           []Author  `json:"authors,omitzero"`
-	Source            Source    `json:"source"`
-	Dist              Dist      `json:"dist"`
+	Source            *Source   `json:"source,omitzero"`
+	Dist              *Dist     `json:"dist,omitzero"`
 	Support           Support   `json:"support,omitzero"`
 	Funding           any       `json:"funding,omitzero"`
 	Autoload          any       `json:"autoload,omitzero"`
@@ -76,4 +76,29 @@ type Dist struct {
 	Type      string `json:"type"`
 	Shasum    string `json:"shasum"`
 	Reference string `json:"reference"`
+}
+
+func newSource(url, sourceType, reference string) *Source {
+	if url == "" && sourceType == "" && reference == "" {
+		return nil
+	}
+
+	return &Source{
+		URL:       url,
+		Type:      sourceType,
+		Reference: reference,
+	}
+}
+
+func newDist(url, distType, shasum, reference string) *Dist {
+	if url == "" && distType == "" && shasum == "" && reference == "" {
+		return nil
+	}
+
+	return &Dist{
+		URL:       url,
+		Type:      distType,
+		Shasum:    shasum,
+		Reference: reference,
+	}
 }

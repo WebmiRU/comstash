@@ -137,17 +137,8 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 			VersionNormalized: v.VersionNormalized,
 			Time:              v.Time,
 			Authors:           authors,
-			Source: Source{
-				URL:       v.SourceUrl,
-				Type:      v.SourceType,
-				Reference: v.SourceReference,
-			},
-			Dist: Dist{
-				URL:       v.DistUrl,
-				Type:      v.DistType,
-				Shasum:    v.DistShasum,
-				Reference: v.DistReference,
-			},
+			Source:            newSource(v.SourceUrl, v.SourceType, v.SourceReference),
+			Dist:              newDist(v.DistUrl, v.DistType, v.DistShasum, v.DistReference),
 			Support: Support{
 				Issues: v.SupportIssues,
 				Source: v.SupportSource,
