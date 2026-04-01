@@ -28,6 +28,13 @@ type Package struct {
 	Require           StringMap `json:"require,omitzero"`
 	RequireDev        StringMap `json:"require-dev,omitzero"`
 	Suggest           any       `json:"suggest,omitzero"` // map[string]string || string
+
+	RequireUnset    bool `json:"-"`
+	RequireDevUnset bool `json:"-"`
+	FundingUnset    bool `json:"-"`
+	AutoloadUnset   bool `json:"-"`
+	ExtraUnset      bool `json:"-"`
+	SuggestUnset    bool `json:"-"`
 }
 
 type StringMap map[string]string
@@ -52,6 +59,64 @@ func (m *StringMap) UnmarshalJSON(data []byte) error {
 
 	*m = nil
 	return nil
+}
+
+func (p *Package) UnmarshalJSON(data []byte) error {
+	type packageAlias Package
+	type packageDecode struct {
+		packageAlias
+		Require    jsonField `json:"require"`
+		RequireDev jsonField `json:"require-dev"`
+		Funding    jsonField `json:"funding"`
+		Autoload   jsonField `json:"autoload"`
+		Extra      jsonField `json:"extra"`
+		Suggest    jsonField `json:"suggest"`
+	}
+
+	var decoded packageDecode
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+
+	*p = Package(decoded.packageAlias)
+
+	if decoded.Require.isUnset() {
+		p.Require = nil
+		p.RequireUnset = true
+	}
+	if decoded.RequireDev.isUnset() {
+		p.RequireDev = nil
+		p.RequireDevUnset = true
+	}
+	if decoded.Funding.isUnset() {
+		p.Funding = nil
+		p.FundingUnset = true
+	}
+	if decoded.Autoload.isUnset() {
+		p.Autoload = nil
+		p.AutoloadUnset = true
+	}
+	if decoded.Extra.isUnset() {
+		p.Extra = nil
+		p.ExtraUnset = true
+	}
+	if decoded.Suggest.isUnset() {
+		p.Suggest = nil
+		p.SuggestUnset = true
+	}
+
+	return nil
+}
+
+type jsonField []byte
+
+func (f *jsonField) UnmarshalJSON(data []byte) error {
+	*f = append((*f)[:0], data...)
+	return nil
+}
+
+func (f jsonField) isUnset() bool {
+	return string(f) == `"__unset"`
 }
 
 type Support struct {

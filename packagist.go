@@ -159,21 +159,33 @@ func expandMinifiedPackages(packages []Package) []Package {
 		}
 		if pkg.Funding != nil {
 			current.Funding = pkg.Funding
+		} else if pkg.FundingUnset {
+			current.Funding = nil
 		}
 		if pkg.Autoload != nil {
 			current.Autoload = pkg.Autoload
+		} else if pkg.AutoloadUnset {
+			current.Autoload = nil
 		}
 		if pkg.Extra != nil {
 			current.Extra = pkg.Extra
+		} else if pkg.ExtraUnset {
+			current.Extra = nil
 		}
 		if pkg.Require != nil {
 			current.Require = pkg.Require
+		} else if pkg.RequireUnset {
+			current.Require = nil
 		}
 		if pkg.RequireDev != nil {
 			current.RequireDev = pkg.RequireDev
+		} else if pkg.RequireDevUnset {
+			current.RequireDev = nil
 		}
 		if pkg.Suggest != nil {
 			current.Suggest = pkg.Suggest
+		} else if pkg.SuggestUnset {
+			current.Suggest = nil
 		}
 
 		expanded = append(expanded, current)
