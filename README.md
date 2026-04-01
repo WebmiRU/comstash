@@ -4,6 +4,13 @@ for [Kubernetes](https://kubernetes.io), [Nomad](https://www.hashicorp.com/en/pr
 ## Changelist:
 - v0.1 first release
 
+## Todo (Roadmap)
+- Add API & Admin panel
+- Add PostgreSQL support
+- Add cache lifetime for packages
+- Add Kubernetes configs and/or Helm chart
+- Add Nomad config
+
 ## Database
 
 Schema migrations are managed with Atlas.
