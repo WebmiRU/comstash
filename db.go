@@ -99,6 +99,14 @@ func marshalStringSlice(values []string) (datatypes.JSON, error) {
 }
 
 func unmarshalStringSlice(data datatypes.JSON) []string {
+	return unmarshalStringSliceWithOption(data, false)
+}
+
+func unmarshalStringSlicePreserveEmpty(data datatypes.JSON) []string {
+	return unmarshalStringSliceWithOption(data, true)
+}
+
+func unmarshalStringSliceWithOption(data datatypes.JSON, preserveEmpty bool) []string {
 	if len(data) == 0 {
 		return nil
 	}
@@ -109,7 +117,7 @@ func unmarshalStringSlice(data datatypes.JSON) []string {
 		return nil
 	}
 
-	if len(values) == 0 {
+	if len(values) == 0 && !preserveEmpty {
 		return nil
 	}
 
@@ -183,13 +191,13 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 		VersionNormalized: pkg.VersionNormalized,
 		License:           license,
 		Authors:           nil,
-		SourceUrl:         pkg.Source.URL,
-		SourceType:        pkg.Source.Type,
-		SourceReference:   pkg.Source.Reference,
-		DistUrl:           pkg.Dist.URL,
-		DistType:          pkg.Dist.Type,
-		DistReference:     pkg.Dist.Reference,
-		DistShasum:        pkg.Dist.Shasum,
+		SourceUrl:         sourceValue(pkg.Source, func(v *Source) string { return v.URL }),
+		SourceType:        sourceValue(pkg.Source, func(v *Source) string { return v.Type }),
+		SourceReference:   sourceValue(pkg.Source, func(v *Source) string { return v.Reference }),
+		DistUrl:           sourceValue(pkg.Dist, func(v *Dist) string { return v.URL }),
+		DistType:          sourceValue(pkg.Dist, func(v *Dist) string { return v.Type }),
+		DistReference:     sourceValue(pkg.Dist, func(v *Dist) string { return v.Reference }),
+		DistShasum:        sourceValue(pkg.Dist, func(v *Dist) string { return v.Shasum }),
 		Type:              pkg.Type,
 		SupportIssues:     pkg.Support.Issues,
 		SupportSource:     pkg.Support.Source,
@@ -311,6 +319,14 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 	}
 
 	return nil
+}
+
+func sourceValue[T any](value *T, getter func(*T) string) string {
+	if value == nil {
+		return ""
+	}
+
+	return getter(value)
 }
 
 func getPackageFromDB(packageName string) ([]models.Package, error) {

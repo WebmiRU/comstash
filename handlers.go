@@ -154,7 +154,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 		if i == 0 {
 			pkg.Name = v.Name
 			pkg.Description = v.Description
-			pkg.Keywords = unmarshalStringSlice(v.Keywords)
+			pkg.Keywords = unmarshalStringSlicePreserveEmpty(v.Keywords)
 			pkg.Homepage = v.Homepage
 			pkg.License = unmarshalStringSlice(v.License)
 			pkg.Type = v.Type
