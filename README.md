@@ -11,7 +11,7 @@ A private Composer proxy/cache for [Kubernetes](https://kubernetes.io), [Nomad](
 - Add cache expiration for packages
 - Add Kubernetes manifests and/or a Helm chart
 - Add Nomad configuration
-- Add Git-based package support for packages without a dist URL
+- Add Git-based package support (for packages without a dist URL and source installs)
 - Add Nginx to serve static ZIP archives for slow clients
 
 ## Database
