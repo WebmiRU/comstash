@@ -3,29 +3,30 @@ package main
 import "encoding/json/v2"
 
 type Repository struct {
-	Minified string               `json:"minified"`
-	Packages map[string][]Package `json:"packages"`
+	Minified           string               `json:"minified"`
+	Packages           map[string][]Package `json:"packages"`
+	SecurityAdvisories []any                `json:"security-advisories"`
 }
 
 type Package struct {
-	Name              string    `json:"name"`
-	Description       string    `json:"description"`
-	Keywords          []string  `json:"keywords"`
-	Homepage          string    `json:"homepage"`
+	Name              string    `json:"name,omitzero"`
+	Description       string    `json:"description,omitzero"`
+	Keywords          []string  `json:"keywords,omitzero"`
+	Homepage          string    `json:"homepage,omitzero"`
 	Version           string    `json:"version"`
 	VersionNormalized string    `json:"version_normalized"`
-	License           []string  `json:"license"`
-	Type              string    `json:"type"`
+	License           []string  `json:"license,omitzero"`
+	Type              string    `json:"type,omitzero"`
 	Time              string    `json:"time"`
-	Authors           []Author  `json:"authors"`
+	Authors           []Author  `json:"authors,omitzero"`
 	Source            Source    `json:"source"`
 	Dist              Dist      `json:"dist"`
-	Support           Support   `json:"support"`
-	Funding           any       `json:"funding"`
-	Autoload          any       `json:"autoload"`
-	Extra             any       `json:"extra"`
-	Require           StringMap `json:"require"`
-	RequireDev        StringMap `json:"require-dev"`
+	Support           Support   `json:"support,omitzero"`
+	Funding           any       `json:"funding,omitzero"`
+	Autoload          any       `json:"autoload,omitzero"`
+	Extra             any       `json:"extra,omitzero"`
+	Require           StringMap `json:"require,omitzero"`
+	RequireDev        StringMap `json:"require-dev,omitzero"`
 	Suggest           any       `json:"suggest,omitzero"` // map[string]string || string
 }
 
@@ -54,13 +55,14 @@ func (m *StringMap) UnmarshalJSON(data []byte) error {
 }
 
 type Support struct {
-	Issues string `json:"issues"`
-	Source string `json:"source"`
+	Issues string `json:"issues,omitzero"`
+	Source string `json:"source,omitzero"`
 }
 
 type Author struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	Name     string `json:"name"`
+	Email    string `json:"email,omitzero"`
+	Homepage string `json:"homepage,omitzero"`
 }
 
 type Source struct {

@@ -35,7 +35,11 @@ func initDB() error {
 		return err
 	}
 
-	return configureSQLite()
+	if err = configureSQLite(); err != nil {
+		return err
+	}
+
+	return migrateSchema()
 }
 
 func configureSQLite() error {
@@ -49,6 +53,48 @@ func configureSQLite() error {
 	for _, query := range pragmas {
 		if err := db.Exec(query).Error; err != nil {
 			return fmt.Errorf("sqlite pragma error for %q: %w", query, err)
+		}
+	}
+
+	return nil
+}
+
+func migrateSchema() error {
+	if !db.Migrator().HasTable(&models.Package{}) {
+		if err := db.AutoMigrate(&models.Package{}); err != nil {
+			return err
+		}
+	}
+
+	if !db.Migrator().HasTable(&models.Author{}) {
+		if err := db.AutoMigrate(&models.Author{}); err != nil {
+			return err
+		}
+	}
+
+	if !db.Migrator().HasTable(&models.Require{}) {
+		if err := db.AutoMigrate(&models.Require{}); err != nil {
+			return err
+		}
+	}
+
+	if !db.Migrator().HasTable(&models.RequireDev{}) {
+		if err := db.AutoMigrate(&models.RequireDev{}); err != nil {
+			return err
+		}
+	}
+
+	for _, column := range []string{"Funding", "Autoload", "Suggest"} {
+		if !db.Migrator().HasColumn(&models.Package{}, column) {
+			if err := db.Migrator().AddColumn(&models.Package{}, column); err != nil {
+				return err
+			}
+		}
+	}
+
+	if !db.Migrator().HasColumn(&models.Author{}, "Homepage") {
+		if err := db.Migrator().AddColumn(&models.Author{}, "Homepage"); err != nil {
+			return err
 		}
 	}
 
@@ -79,7 +125,38 @@ func unmarshalStringSlice(data datatypes.JSON) []string {
 		return nil
 	}
 
+	if len(values) == 0 {
+		return nil
+	}
+
 	return values
+}
+
+func marshalJSONField(value any) (datatypes.JSON, error) {
+	if value == nil {
+		return nil, nil
+	}
+
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
+func unmarshalJSONField(data datatypes.JSON) any {
+	if len(data) == 0 {
+		return nil
+	}
+
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		log.Printf("json field unmarshal error: %v", err)
+		return nil
+	}
+
+	return value
 }
 
 func storePackage(tx *gorm.DB, pkg *Package) error {
@@ -93,9 +170,24 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 		return fmt.Errorf(`JSON field "license" serialization error: %w`, err)
 	}
 
-	extra, err := json.Marshal(pkg.Extra)
+	extra, err := marshalJSONField(pkg.Extra)
 	if err != nil {
 		return fmt.Errorf(`JSON field "extra" serialization error: %w`, err)
+	}
+
+	funding, err := marshalJSONField(pkg.Funding)
+	if err != nil {
+		return fmt.Errorf(`JSON field "funding" serialization error: %w`, err)
+	}
+
+	autoload, err := marshalJSONField(pkg.Autoload)
+	if err != nil {
+		return fmt.Errorf(`JSON field "autoload" serialization error: %w`, err)
+	}
+
+	suggest, err := marshalJSONField(pkg.Suggest)
+	if err != nil {
+		return fmt.Errorf(`JSON field "suggest" serialization error: %w`, err)
 	}
 
 	rec := models.Package{
@@ -119,6 +211,9 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 		SupportSource:     pkg.Support.Source,
 		Time:              pkg.Time,
 		Extra:             datatypes.JSON(extra),
+		Funding:           datatypes.JSON(funding),
+		Autoload:          datatypes.JSON(autoload),
+		Suggest:           datatypes.JSON(suggest),
 	}
 
 	result := tx.Clauses(clause.OnConflict{
@@ -131,9 +226,23 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 			"description",
 			"keywords",
 			"homepage",
+			"version_normalized",
+			"license",
+			"source_url",
+			"source_type",
+			"source_reference",
+			"dist_url",
+			"dist_type",
+			"dist_reference",
+			"dist_shasum",
 			"type",
 			"support_issues",
 			"support_source",
+			"time",
+			"extra",
+			"funding",
+			"autoload",
+			"suggest",
 		}),
 	}).Create(&rec)
 
@@ -147,23 +256,27 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 		}
 	}
 
+	if err = tx.Where("package_id = ?", rec.ID).Delete(&models.Author{}).Error; err != nil {
+		return fmt.Errorf("error while cleanup authors: %w", err)
+	}
+
+	if err = tx.Where("package_id = ?", rec.ID).Delete(&models.Require{}).Error; err != nil {
+		return fmt.Errorf("error while cleanup require: %w", err)
+	}
+
+	if err = tx.Where("package_id = ?", rec.ID).Delete(&models.RequireDev{}).Error; err != nil {
+		return fmt.Errorf("error while cleanup require-dev: %w", err)
+	}
+
 	for _, author := range pkg.Authors {
 		a := models.Author{
 			Name:      author.Name,
 			Email:     author.Email,
+			Homepage:  author.Homepage,
 			PackageID: rec.ID,
 		}
 
-		err := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "name"},
-				{Name: "email"},
-				{Name: "package_id"},
-			},
-			DoNothing: true,
-		}).Create(&a).Error
-
-		if err != nil {
+		if err = tx.Create(&a).Error; err != nil {
 			return fmt.Errorf("error while insert author: %w", err)
 		}
 	}
@@ -175,16 +288,7 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 			PackageID: rec.ID,
 		}
 
-		err := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "name"},
-				{Name: "version"},
-				{Name: "package_id"},
-			},
-			DoNothing: true,
-		}).Create(&require).Error
-
-		if err != nil {
+		if err = tx.Create(&require).Error; err != nil {
 			return fmt.Errorf("error while insert require: %w", err)
 		}
 	}
@@ -196,16 +300,7 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 			PackageID: rec.ID,
 		}
 
-		err := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "name"},
-				{Name: "version"},
-				{Name: "package_id"},
-			},
-			DoNothing: true,
-		}).Create(&require).Error
-
-		if err != nil {
+		if err = tx.Create(&require).Error; err != nil {
 			return fmt.Errorf("error while insert require-dev: %w", err)
 		}
 	}

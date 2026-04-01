@@ -24,6 +24,9 @@ type Package struct {
 	SupportSource     string         `gorm:"type:text"`
 	Time              string         `gorm:"type:text"`
 	Extra             datatypes.JSON `gorm:"type:JSON"`
+	Funding           datatypes.JSON `gorm:"type:JSON"`
+	Autoload          datatypes.JSON `gorm:"type:JSON"`
+	Suggest           datatypes.JSON `gorm:"type:JSON"`
 	Require           []Require      `gorm:"foreignKey:PackageID"`
 	RequireDev        []RequireDev   `gorm:"foreignKey:PackageID"`
 }

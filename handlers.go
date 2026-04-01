@@ -100,27 +100,29 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	for _, v := range data {
-		var extra map[string]any
-		if len(v.Extra) > 0 {
-			_ = json.Unmarshal(v.Extra, &extra)
-		}
-
-		authors := make([]Author, 0, len(v.Authors))
+	for i, v := range data {
+		var authors []Author
 		for _, a := range v.Authors {
 			authors = append(authors, Author{
-				Name:  a.Name,
-				Email: a.Email,
+				Name:     a.Name,
+				Email:    a.Email,
+				Homepage: a.Homepage,
 			})
 		}
 
-		require := map[string]string{}
+		var require map[string]string
 		for _, v1 := range v.Require {
+			if require == nil {
+				require = map[string]string{}
+			}
 			require[v1.Name] = v1.Version
 		}
 
-		requireDev := map[string]string{}
+		var requireDev map[string]string
 		for _, v1 := range v.RequireDev {
+			if requireDev == nil {
+				requireDev = map[string]string{}
+			}
 			requireDev[v1.Name] = v1.Version
 		}
 
@@ -128,15 +130,9 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 			v.DistUrl = fmt.Sprintf("%s/cache/%s?v=%s", requestBaseURL(r), v.Name, v.Version)
 		}
 
-		packages = append(packages, Package{
-			Name:              v.Name,
-			Description:       v.Description,
-			Keywords:          unmarshalStringSlice(v.Keywords),
-			Homepage:          v.Homepage,
+		pkg := Package{
 			Version:           v.Version,
 			VersionNormalized: v.VersionNormalized,
-			License:           unmarshalStringSlice(v.License),
-			Type:              v.Type,
 			Time:              v.Time,
 			Authors:           authors,
 			Source: Source{
@@ -154,17 +150,29 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 				Issues: v.SupportIssues,
 				Source: v.SupportSource,
 			},
-			Funding:    nil,
-			Autoload:   nil,
-			Extra:      extra,
+			Funding:    unmarshalJSONField(v.Funding),
+			Autoload:   unmarshalJSONField(v.Autoload),
+			Extra:      unmarshalJSONField(v.Extra),
 			Require:    require,
 			RequireDev: requireDev,
-			Suggest:    nil,
-		})
+			Suggest:    unmarshalJSONField(v.Suggest),
+		}
+
+		if i == 0 {
+			pkg.Name = v.Name
+			pkg.Description = v.Description
+			pkg.Keywords = unmarshalStringSlice(v.Keywords)
+			pkg.Homepage = v.Homepage
+			pkg.License = unmarshalStringSlice(v.License)
+			pkg.Type = v.Type
+		}
+
+		packages = append(packages, pkg)
 	}
 
 	response := Repository{
-		Minified: "composer/2.0",
+		Minified:           "composer/2.0",
+		SecurityAdvisories: []any{},
 		Packages: map[string][]Package{
 			packageName: packages,
 		},
