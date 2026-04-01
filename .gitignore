@@ -1,1 +1,4 @@
 .idea
+vendor
+db
+*_test.go
