@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"gorm.io/datatypes"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -19,7 +20,7 @@ var db *gorm.DB
 
 func initDB() error {
 	var err error
-	db, err = gorm.Open(sqlite.Open("db"), &gorm.Config{
+	db, err = gorm.Open(openDBDialector(), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
@@ -35,11 +36,36 @@ func initDB() error {
 		return err
 	}
 
-	if err = configureSQLite(); err != nil {
-		return err
-	}
+	return configureDB()
+}
 
-	return migrateSchema()
+func openDBDialector() gorm.Dialector {
+	driver := os.Getenv("DB_DRIVER")
+	dsn := os.Getenv("DB_DSN")
+
+	switch driver {
+	case "", "sqlite", "sqlite3":
+		if dsn == "" {
+			dsn = "db"
+		}
+		return sqlite.Open(dsn)
+	case "postgres", "postgresql":
+		if dsn == "" {
+			dsn = "host=127.0.0.1 user=postgres password=postgres dbname=comstash port=5432 sslmode=disable"
+		}
+		return postgres.Open(dsn)
+	default:
+		panic(fmt.Sprintf("unsupported DB_DRIVER %q", driver))
+	}
+}
+
+func configureDB() error {
+	switch os.Getenv("DB_DRIVER") {
+	case "", "sqlite", "sqlite3":
+		return configureSQLite()
+	default:
+		return nil
+	}
 }
 
 func configureSQLite() error {
@@ -53,48 +79,6 @@ func configureSQLite() error {
 	for _, query := range pragmas {
 		if err := db.Exec(query).Error; err != nil {
 			return fmt.Errorf("sqlite pragma error for %q: %w", query, err)
-		}
-	}
-
-	return nil
-}
-
-func migrateSchema() error {
-	if !db.Migrator().HasTable(&models.Package{}) {
-		if err := db.AutoMigrate(&models.Package{}); err != nil {
-			return err
-		}
-	}
-
-	if !db.Migrator().HasTable(&models.Author{}) {
-		if err := db.AutoMigrate(&models.Author{}); err != nil {
-			return err
-		}
-	}
-
-	if !db.Migrator().HasTable(&models.Require{}) {
-		if err := db.AutoMigrate(&models.Require{}); err != nil {
-			return err
-		}
-	}
-
-	if !db.Migrator().HasTable(&models.RequireDev{}) {
-		if err := db.AutoMigrate(&models.RequireDev{}); err != nil {
-			return err
-		}
-	}
-
-	for _, column := range []string{"Funding", "Autoload", "Suggest"} {
-		if !db.Migrator().HasColumn(&models.Package{}, column) {
-			if err := db.Migrator().AddColumn(&models.Package{}, column); err != nil {
-				return err
-			}
-		}
-	}
-
-	if !db.Migrator().HasColumn(&models.Author{}, "Homepage") {
-		if err := db.Migrator().AddColumn(&models.Author{}, "Homepage"); err != nil {
-			return err
 		}
 	}
 
@@ -276,7 +260,14 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 			PackageID: rec.ID,
 		}
 
-		if err = tx.Create(&a).Error; err != nil {
+		if err = tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "name"},
+				{Name: "email"},
+				{Name: "package_id"},
+			},
+			DoNothing: true,
+		}).Create(&a).Error; err != nil {
 			return fmt.Errorf("error while insert author: %w", err)
 		}
 	}
@@ -288,7 +279,14 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 			PackageID: rec.ID,
 		}
 
-		if err = tx.Create(&require).Error; err != nil {
+		if err = tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "name"},
+				{Name: "version"},
+				{Name: "package_id"},
+			},
+			DoNothing: true,
+		}).Create(&require).Error; err != nil {
 			return fmt.Errorf("error while insert require: %w", err)
 		}
 	}
@@ -300,7 +298,14 @@ func storePackage(tx *gorm.DB, pkg *Package) error {
 			PackageID: rec.ID,
 		}
 
-		if err = tx.Create(&require).Error; err != nil {
+		if err = tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "name"},
+				{Name: "version"},
+				{Name: "package_id"},
+			},
+			DoNothing: true,
+		}).Create(&require).Error; err != nil {
 			return fmt.Errorf("error while insert require-dev: %w", err)
 		}
 	}

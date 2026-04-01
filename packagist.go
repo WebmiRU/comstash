@@ -18,6 +18,12 @@ type upstreamError struct {
 	Err        error
 }
 
+type unsupportedDistError struct {
+	PackageName string
+	Version     string
+	DistType    string
+}
+
 func (e *upstreamError) Error() string {
 	if e.Err == nil {
 		return fmt.Sprintf("upstream error, status code: %d", e.StatusCode)
@@ -28,6 +34,14 @@ func (e *upstreamError) Error() string {
 
 func (e *upstreamError) Unwrap() error {
 	return e.Err
+}
+
+func (e *unsupportedDistError) Error() string {
+	if e.DistType == "" {
+		return fmt.Sprintf("package %q version %q has no dist metadata", e.PackageName, e.Version)
+	}
+
+	return fmt.Sprintf("package %q version %q has unsupported dist type %q", e.PackageName, e.Version, e.DistType)
 }
 
 func ensurePackageData(packageName string) error {

@@ -49,6 +49,8 @@ func writeHTTPError(w http.ResponseWriter, err error, notFoundMsg string) {
 		return
 	case isNotFoundError(err):
 		http.Error(w, notFoundMsg, http.StatusNotFound)
+	case errors.As(err, new(*unsupportedDistError)):
+		http.Error(w, "Package dist is unavailable", http.StatusNotFound)
 	case errors.As(err, new(*upstreamError)):
 		var upstreamErr *upstreamError
 		_ = errors.As(err, &upstreamErr)
@@ -210,6 +212,20 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if row.DistType == "" || row.DistUrl == "" {
+		fmt.Printf("Package %q version %q has incomplete dist metadata. Refreshing from Packagist...\n", packageName, version)
+		if err = ensurePackageData(packageName); err != nil {
+			writeHTTPError(w, err, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version))
+			return
+		}
+
+		row, err = getPackageMetaFromDB(packageName, version)
+		if err != nil {
+			writeHTTPError(w, err, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version))
+			return
+		}
+	}
+
 	switch row.DistType {
 	case "zip":
 		filepath := fmt.Sprintf("cache/packages/%s/%s.zip", packageName, version)
@@ -255,8 +271,11 @@ func cacheHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("File send error: %v", err)
 		}
 	default:
-		log.Println("Unknown dist type:", row.DistType)
-		http.Error(w, "", http.StatusInternalServerError)
+		writeHTTPError(w, &unsupportedDistError{
+			PackageName: packageName,
+			Version:     version,
+			DistType:    row.DistType,
+		}, fmt.Sprintf(`Package "%s" or version "%s" not found`, packageName, version))
 	}
 }
 
