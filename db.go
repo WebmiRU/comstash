@@ -69,15 +69,28 @@ func configureDB() error {
 }
 
 func configureSQLite() error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("sqlite db handle error: %w", err)
+	}
+
+	// SQLite handles concurrent reads well in WAL mode, but writes still serialize.
+	// Keep a single pooled connection so every operation shares the same pragmas and
+	// we do not hit "database is locked" under concurrent package refreshes.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxIdleTime(0)
+	sqlDB.SetConnMaxLifetime(0)
+
 	pragmas := []string{
 		"PRAGMA journal_mode=WAL;",
 		"PRAGMA synchronous=NORMAL;",
 		"PRAGMA foreign_keys=ON;",
-		"PRAGMA busy_timeout=5000;",
+		"PRAGMA busy_timeout=10000;",
 	}
 
 	for _, query := range pragmas {
-		if err := db.Exec(query).Error; err != nil {
+		if err = db.Exec(query).Error; err != nil {
 			return fmt.Errorf("sqlite pragma error for %q: %w", query, err)
 		}
 	}

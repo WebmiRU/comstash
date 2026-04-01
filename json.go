@@ -3,7 +3,7 @@ package main
 import "encoding/json/v2"
 
 type Repository struct {
-	Minified           string               `json:"minified"`
+	Minified           string               `json:"minified,omitzero"`
 	Packages           map[string][]Package `json:"packages"`
 	SecurityAdvisories []any                `json:"security-advisories"`
 }

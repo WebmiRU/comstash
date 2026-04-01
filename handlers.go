@@ -102,7 +102,7 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	for i, v := range data {
+	for _, v := range data {
 		var authors []Author
 		for _, a := range v.Authors {
 			authors = append(authors, Author{
@@ -128,10 +128,6 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 			requireDev[v1.Name] = v1.Version
 		}
 
-		if v.DistType == "zip" {
-			v.DistUrl = fmt.Sprintf("%s/cache/%s?v=%s", requestBaseURL(r), v.Name, v.Version)
-		}
-
 		pkg := Package{
 			Version:           v.Version,
 			VersionNormalized: v.VersionNormalized,
@@ -151,20 +147,23 @@ func vendorPackageHandler(w http.ResponseWriter, r *http.Request) {
 			Suggest:    unmarshalJSONField(v.Suggest),
 		}
 
-		if i == 0 {
-			pkg.Name = v.Name
-			pkg.Description = v.Description
-			pkg.Keywords = unmarshalStringSlicePreserveEmpty(v.Keywords)
-			pkg.Homepage = v.Homepage
-			pkg.License = unmarshalStringSlice(v.License)
-			pkg.Type = v.Type
-		}
+		pkg.Name = v.Name
+		pkg.Description = v.Description
+		pkg.Keywords = unmarshalStringSlicePreserveEmpty(v.Keywords)
+		pkg.Homepage = v.Homepage
+		pkg.License = unmarshalStringSlice(v.License)
+		pkg.Type = v.Type
 
 		packages = append(packages, pkg)
 	}
 
+	for i := range packages {
+		if packages[i].Dist != nil && packages[i].Dist.Type == "zip" {
+			packages[i].Dist.URL = fmt.Sprintf("%s/cache/%s?v=%s", requestBaseURL(r), packageName, data[i].Version)
+		}
+	}
+
 	response := Repository{
-		Minified:           "composer/2.0",
 		SecurityAdvisories: []any{},
 		Packages: map[string][]Package{
 			packageName: packages,
